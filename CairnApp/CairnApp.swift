@@ -71,6 +71,9 @@ struct CairnApp: App {
             }
         }
         #if os(macOS)
+        .defaultSize(width: 1_180, height: 780)
+        #endif
+        #if os(macOS)
         Settings {
             Group {
                 if model.storeFailure != nil {

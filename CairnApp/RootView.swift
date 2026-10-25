@@ -263,26 +263,28 @@ struct MainShellView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(sections, selection: $selection) { section in
-                Label(section.title, systemImage: section.systemImage)
-                    .tag(section)
-            }
-            .navigationSplitViewColumnWidth(min: 200, ideal: 220)
-        } detail: {
-            NavigationStack {
-                selection.destination
-                    .toolbar {
-                        if selection != .settings {
-                            ToolbarItem {
-                                NavigationLink { SettingsView() } label: {
-                                    Label("Settings", systemImage: "gearshape")
-                                }
-                            }
-                        }
+        NavigationStack {
+            selection.destination
+        }
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("Destination", selection: $selection) {
+                    ForEach(sections) { section in
+                        Text(section.title).tag(section)
                     }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .accessibilityIdentifier("macNavigation")
+            }
+            if selection != .settings {
+                ToolbarItem {
+                    SettingsLink { Label("Settings", systemImage: "gearshape") }
+                }
             }
         }
+        .id(selection)
         .frame(minWidth: 900, minHeight: 600)
         .onChange(of: sections, initial: true) { _, visible in
             if !visible.contains(selection) { selection = visible.first ?? .settings }

@@ -77,7 +77,7 @@ struct TransactionsView: View {
                     }
                 }
             }
-            .cairnScreen(maxWidth: 920)
+            .cairnScreen(maxWidth: activityWidth)
             .animation(CairnTheme.Motion.standard, value: feed?.rows.count ?? 0)
         }
         .cairnScrollEdge()
@@ -165,6 +165,14 @@ struct TransactionsView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("reviewInboxEntry")
         .accessibilityHint(count == 0 ? "Review recently added transactions" : "Review \(count) transactions that need attention")
+    }
+
+    private var activityWidth: CGFloat {
+        #if os(macOS)
+        1_280
+        #else
+        920
+        #endif
     }
 
     // MARK: - Filters

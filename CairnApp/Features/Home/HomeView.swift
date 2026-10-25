@@ -51,7 +51,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .cairnScreen(maxWidth: CairnTheme.screenMaxWidth)
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnScrollEdge()
         .cairnCanvas()
@@ -79,77 +79,88 @@ struct HomeView: View {
 
     // MARK: - Sections
 
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
+
     private var todayContent: some View {
         VStack(alignment: .leading, spacing: 28) {
-            HStack {
-                Label("Cairn", systemImage: "mountain.2")
-                    .foregroundStyle(CairnTheme.accent)
-                Spacer()
-                Text(Date.now, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
-                    .foregroundStyle(.secondary)
+            todayHeader
+            #if os(macOS)
+            FlowColumns(minimumColumnWidth: 360) {
+                spendingSummary
+            } secondary: {
+                NetWorthHero(accounts: accounts, settings: settings)
             }
-            .font(.subheadline)
+            FlowColumns(minimumColumnWidth: 320) {
+                FlowSection { FlowUpcomingPayments(currency: budgetCurrency) }
+            } secondary: {
+                FlowSection {
+                    planLink
+                    SyncIssueCard()
+                    syncStatus
+                }
+            }
+            #else
             spendingSummary
             FlowSection {
                 NetWorthHero(accounts: accounts, settings: settings, compact: true)
             }
             FlowUpcomingPayments(currency: budgetCurrency)
-            NavigationLink { HomeView(destination: .plan) } label: {
-                FlowLinkRow(title: "Your plan", symbol: "calendar", subtitle: "Budgets, funds, and shared expenses")
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("todayPlanEntry")
+            planLink
             SyncIssueCard()
             syncStatus
+            #endif
         }
+    }
+
+    private var todayHeader: some View {
+        HStack {
+            Label("Cairn", systemImage: "mountain.2")
+                .foregroundStyle(CairnTheme.accent)
+            Spacer()
+            Text(Date.now, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                .foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
+    }
+
+    private var planLink: some View {
+        NavigationLink { HomeView(destination: .plan) } label: {
+            FlowLinkRow(title: "Your plan", symbol: "calendar", subtitle: "Budgets, funds, and shared expenses")
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("todayPlanEntry")
     }
 
     private var planContent: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            spendingSummary
-            if budgetingEnabled, let summary = budgetSnapshot {
-                FlowSection {
-                    ScreenSectionHeader("Categories") {
-                        NavigationLink { budgetDestination } label: {
-                            Text("Edit plan").font(.subheadline).frame(minHeight: 44)
-                        }
-                    }
-                    ForEach(summary.lines.filter { $0.plannedMinorUnits != nil || $0.spentMinorUnits > 0 }) { line in
-                        NavigationLink { budgetDestination } label: {
-                            VStack(alignment: .leading, spacing: 8) {
-                                HStack {
-                                    Text(line.category.name).font(.body.weight(.medium))
-                                    Spacer(minLength: 8)
-                                    AmountText(money: Money(minorUnits: line.spentMinorUnits, currency: summary.currency))
-                                }
-                                if let planned = line.plannedMinorUnits, planned > 0 {
-                                    ProgressView(value: min(1, max(0, Double(line.spentMinorUnits) / Double(planned))))
-                                        .tint(CairnTheme.accent)
-                                    Text("of \(Money(minorUnits: planned, currency: summary.currency).formatted()) planned")
-                                        .font(.caption).foregroundStyle(.secondary)
-                                } else {
-                                    Text("No limit set").font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                            .foregroundStyle(.primary)
-                            .padding(.vertical, 8)
-                            .frame(minHeight: 52)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            FlowUpcomingPayments(currency: budgetCurrency, limit: 6)
-            NavigationLink { ForecastView() } label: {
-                FlowLinkRow(title: "Cash-flow forecast", symbol: "chart.xyaxis.line", subtitle: "Your next 30 days")
-            }
-            .buttonStyle(.plain)
-            PersonalTrackingEntryPoints(showsFundDetails: true)
-        }
+        PlanOverview(budgetingEnabled: budgetingEnabled,
+                     snapshot: budgetingEnabled ? budgetSnapshot : nil,
+                     currency: budgetCurrency, monthKey: budgetMonthKey,
+                     isLoading: !didLoadBudgetSummary, loadFailed: budgetLoadFailed,
+                     retry: { budgetReloadToken &+= 1 })
     }
 
     private var wealthContent: some View {
+        #if os(macOS)
+        FlowColumns(primaryFraction: 0.52, minimumColumnWidth: 360) {
+            wealthSummary
+        } secondary: {
+            wealthAccounts
+        }
+        #else
+        VStack(alignment: .leading, spacing: 28) {
+            wealthSummary
+            wealthAccounts
+        }
+        #endif
+    }
+
+    private var wealthSummary: some View {
         VStack(alignment: .leading, spacing: 28) {
             NetWorthHero(accounts: accounts, settings: settings)
             FlowSection {
@@ -160,6 +171,11 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("investmentDetails")
             }
+        }
+    }
+
+    private var wealthAccounts: some View {
+        VStack(alignment: .leading, spacing: 28) {
             ScreenSectionHeader("Accounts") {
                 Text(accounts.count, format: .number).font(.subheadline).foregroundStyle(.secondary)
             }
@@ -231,7 +247,7 @@ struct HomeView: View {
                 }
                 if destination == .today {
                     FlowLineChart(points: spendingHistory, currency: budgetCurrency,
-                                  title: "Spending this month", includesZero: true, compact: true,
+                                  title: "Spending this month", includesZero: true, compact: compactCharts,
                                   selection: $spendingSelection)
                         .accessibilityIdentifier("todaySpendingChart")
                 }
@@ -244,6 +260,14 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("spendingDetails")
         }
+    }
+
+    private var compactCharts: Bool {
+        #if os(macOS)
+        false
+        #else
+        true
+        #endif
     }
 
     private func remainingText(_ summary: BudgetSnapshot) -> some View {

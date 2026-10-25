@@ -4,8 +4,6 @@ import Charts
 import CairnCore
 #if os(iOS)
 import UIKit
-#elseif os(macOS)
-import AppKit
 #endif
 
 /// Flow groups related information with spacing and rules, leaving material
@@ -19,6 +17,61 @@ struct FlowSection<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// A dashboard pair that becomes a vertical flow when each column would be
+/// too narrow. Keeping one layout container preserves chart selection on resize.
+struct FlowColumns<Primary: View, Secondary: View>: View {
+    var primaryFraction: CGFloat = 0.5
+    var minimumColumnWidth: CGFloat = 320
+    @ViewBuilder var primary: Primary
+    @ViewBuilder var secondary: Secondary
+
+    var body: some View {
+        FlowColumnsLayout(primaryFraction: primaryFraction, minimumColumnWidth: minimumColumnWidth) {
+            primary.frame(maxWidth: .infinity, alignment: .leading)
+            secondary.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+private struct FlowColumnsLayout: Layout {
+    let primaryFraction: CGFloat
+    let minimumColumnWidth: CGFloat
+    private let spacing: CGFloat = 32
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? minimumColumnWidth * 2 + spacing
+        let widths = columnWidths(in: width)
+        let sizes = subviews.enumerated().map { index, view in
+            view.sizeThatFits(ProposedViewSize(width: widths[index], height: nil))
+        }
+        let height = widths[0] == width
+            ? sizes.reduce(0) { $0 + $1.height } + spacing
+            : sizes.map(\.height).max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let widths = columnWidths(in: bounds.width)
+        var origin = bounds.origin
+        for (index, view) in subviews.enumerated() {
+            let size = view.sizeThatFits(ProposedViewSize(width: widths[index], height: nil))
+            view.place(at: origin, anchor: .topLeading, proposal: ProposedViewSize(width: widths[index], height: size.height))
+            if widths[0] == bounds.width {
+                origin.y += size.height + spacing
+            } else {
+                origin.x += widths[index] + spacing
+            }
+        }
+    }
+
+    private func columnWidths(in width: CGFloat) -> [CGFloat] {
+        guard width >= minimumColumnWidth * 2 + spacing else { return [width, width] }
+        let available = width - spacing
+        let first = min(available - minimumColumnWidth, max(minimumColumnWidth, available * primaryFraction))
+        return [first, available - first]
     }
 }
 
@@ -281,37 +334,13 @@ private struct FlowChartHorizontalPan: UIGestureRecognizerRepresentable {
     }
 }
 #elseif os(macOS)
-/// Rejects vertical movement before it can compete with a containing ScrollView.
-private struct FlowChartHorizontalPan: NSGestureRecognizerRepresentable {
+/// A mouse drag inspects history; wheel and trackpad scrolling stay with the page.
+private struct FlowChartHorizontalPan: Gesture {
     let onChanged: (CGPoint, CGPoint) -> Void
 
-    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
-        Coordinator()
-    }
-
-    func makeNSGestureRecognizer(context: Context) -> NSPanGestureRecognizer {
-        let recognizer = NSPanGestureRecognizer()
-        recognizer.delegate = context.coordinator
-        return recognizer
-    }
-
-    func handleNSGestureRecognizerAction(_ recognizer: NSPanGestureRecognizer, context: Context) {
-        guard recognizer.state == .began || recognizer.state == .changed else { return }
-        let location = context.converter.location(in: .local)
-        if recognizer.state == .began { context.coordinator.startLocation = location }
-        if let startLocation = context.coordinator.startLocation {
-            onChanged(startLocation, location)
-        }
-    }
-
-    final class Coordinator: NSObject, NSGestureRecognizerDelegate {
-        var startLocation: CGPoint?
-
-        func gestureRecognizerShouldBegin(_ gestureRecognizer: NSGestureRecognizer) -> Bool {
-            guard let pan = gestureRecognizer as? NSPanGestureRecognizer else { return false }
-            let translation = pan.translation(in: pan.view)
-            return abs(translation.x) > abs(translation.y)
-        }
+    var body: some Gesture {
+        DragGesture(minimumDistance: 2)
+            .onChanged { onChanged($0.startLocation, $0.location) }
     }
 }
 #endif

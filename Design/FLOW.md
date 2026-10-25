@@ -15,6 +15,9 @@ every section in a card.
   numerals; supporting amounts use tabular figures.
 - Keep content within a 760-point reading width. Let labels, controls, and amounts
   stack when larger text needs more room. Preserve 44-point control targets.
+- On Mac, dashboards use up to 1,440 points across the window. Related summaries
+  sit in columns and stack when there is insufficient room for usable charts
+  and rows. Keep forms and prose at their narrower reading width.
 - Use native navigation, menus, sheets, and toolbars. Liquid Glass belongs to
   controls and navigation; charts remain on opaque content surfaces.
 
@@ -26,6 +29,15 @@ recurring payments, funds, and shared expenses. Wealth brings the balance sheet
 and investment details together. Settings remains reachable from a toolbar even
 when its optional navigation destination is hidden. Saved navigation preferences
 remain usable.
+
+Mac uses a compact destination picker in the window toolbar. It leaves the
+content width available for charts, accounts, and planning. Changing destination
+returns to that destination's overview; Settings uses the native settings window.
+
+Plan leads with the month’s category-limit progress and a compact category
+shortlist ordered by overruns and spending. The full limits list remains one
+step away. Upcoming payments, fund progress, shared expenses, and the cash-flow
+forecast sit alongside the budget on wide windows and follow it on phones.
 
 ## Charts
 

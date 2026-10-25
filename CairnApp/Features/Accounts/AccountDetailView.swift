@@ -53,45 +53,18 @@ struct AccountDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
-                summary
-                    .cairnAppear()
-                if !holdings.isEmpty {
-                    holdingsCard
-                        .cairnAppear(delay: 0.03)
+                #if os(macOS)
+                FlowColumns(primaryFraction: 0.36, minimumColumnWidth: 320) {
+                    accountOverview
+                } secondary: {
+                    accountActivity
                 }
-                // The feed is created on first task; until then there is no
-                // count to branch on, so nothing is shown rather than flashing
-                // the empty state.
-                if let feed {
-                    if transactionCount > 1 {
-                        historyCard
-                            .cairnAppear(delay: 0.05)
-                    }
-                    if transactionCount == 0 {
-                        emptyTransactions
-                    } else if !feed.rows.isEmpty {
-                        TransactionDayList(
-                            sections: feed.sections,
-                            showsAccount: false,
-                            onReachEnd: { feed.loadMore() },
-                            onEdit: account.isManual ? { row in
-                                if let model = model(for: row) { editingTransaction = model }
-                            } : nil,
-                            onDelete: account.isManual ? { row in
-                                if let model = model(for: row) { transactionToDelete = model }
-                            } : nil
-                        )
-                        .cairnAppear(delay: 0.1)
-                    } else if !searchText.isEmpty {
-                        EmptyStateView(
-                            systemImage: "magnifyingglass",
-                            title: "Nothing matches",
-                            message: "Try a different search."
-                        )
-                    }
-                }
+                #else
+                accountOverview
+                accountActivity
+                #endif
             }
-            .cairnScreen()
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnCanvas()
         .navigationTitle(account.displayName)
@@ -177,6 +150,50 @@ struct AccountDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes the account and all of its transactions. This can’t be undone.")
+        }
+    }
+
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
+
+    private var accountOverview: some View {
+        VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
+            summary.cairnAppear()
+            if !holdings.isEmpty { holdingsCard.cairnAppear(delay: 0.03) }
+        }
+    }
+
+    @ViewBuilder
+    private var accountActivity: some View {
+        // Wait for the bounded feed before choosing its empty state.
+        if let feed {
+            VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
+                if transactionCount > 1 { historyCard.cairnAppear(delay: 0.05) }
+                if transactionCount == 0 {
+                    emptyTransactions
+                } else if !feed.rows.isEmpty {
+                    TransactionDayList(
+                        sections: feed.sections,
+                        showsAccount: false,
+                        onReachEnd: { feed.loadMore() },
+                        onEdit: account.isManual ? { row in
+                            if let model = model(for: row) { editingTransaction = model }
+                        } : nil,
+                        onDelete: account.isManual ? { row in
+                            if let model = model(for: row) { transactionToDelete = model }
+                        } : nil
+                    )
+                    .cairnAppear(delay: 0.1)
+                } else if !searchText.isEmpty {
+                    EmptyStateView(systemImage: "magnifyingglass", title: "Nothing matches",
+                                   message: "Try a different search.")
+                }
+            }
         }
     }
 

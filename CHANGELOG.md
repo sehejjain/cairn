@@ -16,11 +16,16 @@ All notable changes to Cairn are documented here. This project follows
   with spending pace and monthly trend lines in Spending detail.
 - Organize budgets, upcoming payments, funds, and shared expenses in Plan;
   bring account balances and investments together in Wealth.
+- Replace the Mac sidebar with a compact destination switcher and arrange
+  dashboard summaries in columns that adapt to the window width.
+- Make Plan easier to scan with a monthly limit summary, compact category rows,
+  and previews of upcoming payments and funds on iPhone and Mac.
 - Adapt financial summaries and chart controls to larger text while retaining
   native iOS navigation and Liquid Glass controls. Keep Settings in the toolbar.
 
 ### Fixed
 
+- Keep distinct transaction records as separate rows when imported bank IDs collide.
 - Request App Group authorization when signing Mac builds so they can open
   the existing shared data store.
 

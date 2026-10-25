@@ -58,15 +58,27 @@ struct NetWorthView: View {
                         message: "Connect a bank and sync to build your net worth history."
                     )
                 } else {
+                    #if os(macOS)
+                    FlowColumns(primaryFraction: 0.6, minimumColumnWidth: 320) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            chartCard
+                            breakdownCard
+                            if totals.count > 1 { currenciesCard }
+                        }
+                    } secondary: {
+                        accountsCard
+                    }
+                    #else
                     chartCard
                     breakdownCard
                     if totals.count > 1 {
                         currenciesCard
                     }
                     accountsCard
+                    #endif
                 }
             }
-            .cairnScreen()
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnCanvas()
         .navigationTitle("Net Worth")
@@ -76,6 +88,14 @@ struct NetWorthView: View {
     }
 
     // MARK: - Data
+
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
 
     private var totals: [CurrencyTotal] { NetWorthMath.totals(accounts: accounts) }
 

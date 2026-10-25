@@ -98,11 +98,7 @@ struct InvestmentsView: View {
                         manualAccountType: .investment
                     )
                 } else {
-                    hero
-                    if !investmentHoldings.isEmpty {
-                        portfolioSummary
-                        positionMixCard
-                    }
+                    overview
                     if normalizedSearchText.isEmpty && investmentHoldings.isEmpty {
                         holdingsEmptyNote
                     }
@@ -114,7 +110,7 @@ struct InvestmentsView: View {
                     aboutCard
                 }
             }
-            .cairnScreen()
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnCanvas()
         .navigationTitle("Investments")
@@ -130,6 +126,38 @@ struct InvestmentsView: View {
     }
 
     // MARK: - Hero
+
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
+
+    @ViewBuilder
+    private var overview: some View {
+        #if os(macOS)
+        if investmentHoldings.isEmpty {
+            hero
+        } else {
+            FlowColumns(primaryFraction: 0.56, minimumColumnWidth: 360) {
+                hero
+            } secondary: {
+                VStack(alignment: .leading, spacing: 24) {
+                    portfolioSummary
+                    positionMixCard
+                }
+            }
+        }
+        #else
+        hero
+        if !investmentHoldings.isEmpty {
+            portfolioSummary
+            positionMixCard
+        }
+        #endif
+    }
 
     private var hero: some View {
         let change = NetWorthMath.change(in: series)

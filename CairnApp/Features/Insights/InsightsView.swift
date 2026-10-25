@@ -54,21 +54,13 @@ struct InsightsView: View {
                     insufficientData
                     monthlyBudgetLink
                 } else {
-                    heroCard(data).cairnAppear()
-                    monthlyBudgetLink
-
-                    categoryCard(data)
-                    trendCard(data)
-                    merchantsCard(data)
-                    recurringCard
-                    categorizeCard
-                    exploreCard
+                    dashboard(data)
                 }
                 if !hasInsightData {
                     exploreCard
                 }
             }
-            .cairnScreen(maxWidth: CairnTheme.screenMaxWidth)
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnScrollEdge()
         .cairnCanvas()
@@ -95,6 +87,50 @@ struct InsightsView: View {
     }
 
     // MARK: - Currency & data
+
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
+
+    @ViewBuilder
+    private func dashboard(_ data: InsightsSnapshot) -> some View {
+        #if os(macOS)
+        FlowColumns(primaryFraction: 0.56, minimumColumnWidth: 380) {
+            VStack(alignment: .leading, spacing: 24) {
+                heroCard(data)
+                monthlyBudgetLink
+            }
+        } secondary: {
+            categoryCard(data)
+        }
+        FlowColumns(minimumColumnWidth: 380) {
+            trendCard(data)
+        } secondary: {
+            merchantsCard(data)
+        }
+        FlowColumns(minimumColumnWidth: 340) {
+            VStack(alignment: .leading, spacing: 24) {
+                recurringCard
+                categorizeCard
+            }
+        } secondary: {
+            exploreCard
+        }
+        #else
+        heroCard(data).cairnAppear()
+        monthlyBudgetLink
+        categoryCard(data)
+        trendCard(data)
+        merchantsCard(data)
+        recurringCard
+        categorizeCard
+        exploreCard
+        #endif
+    }
 
     /// Whether there is any transaction to analyze at all. With none, every
     /// card would read zero, so an explanation is clearer than empty charts.

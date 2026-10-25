@@ -242,31 +242,40 @@ struct PersonalTrackingEntryPoints: View {
     var body: some View {
         if showsFundDetails {
             FlowSection {
-                ScreenSectionHeader("Funds") {
-                    NavigationLink { SinkingFundsView() } label: {
-                        Text("Manage").font(.subheadline).frame(minHeight: 44)
+                VStack(alignment: .leading, spacing: 14) {
+                    ScreenSectionHeader("Funds") {
+                        NavigationLink { SinkingFundsView() } label: {
+                            Text("Manage").font(.subheadline).frame(minHeight: 44)
+                        }
+                        .accessibilityIdentifier("sinkingFundsEntry")
                     }
-                    .accessibilityIdentifier("sinkingFundsEntry")
-                }
-                if funds.allSatisfy({ $0.stateRaw == "archived" }) {
-                    Text("Set money aside for what's ahead.")
-                        .font(.subheadline).foregroundStyle(.secondary)
-                }
-                ForEach(funds.filter { $0.stateRaw != "archived" }.sorted { $0.name < $1.name }) { fund in
-                    NavigationLink { SinkingFundDetail(fundID: fund.uuid) } label: {
-                        fundRow(fund)
+                    if activeFunds.isEmpty {
+                        Text("Set money aside for what's ahead.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    } else {
+                        ForEach(activeFunds.prefix(3)) { fund in
+                            NavigationLink { SinkingFundDetail(fundID: fund.uuid) } label: {
+                                fundRow(fund)
+                            }
+                            .buttonStyle(.plain)
+                            if fund.id != activeFunds.prefix(3).last?.id { Divider().padding(.leading, 42) }
+                        }
+                    }
+
+                    Divider()
+                    NavigationLink { SharedExpensesView() } label: {
+                        entryRow("Shared expenses", symbol: "person.2") {
+                            if sharedCurrencies.isEmpty { Text("Keep track of who owes what") }
+                            ForEach(sharedCurrencies, id: \.self) { Text(sharedSummary($0)) }
+                        }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel("Shared expenses")
+                    .accessibilityValue(sharedCurrencies.map { sharedSummary($0) }.joined(separator: "; "))
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityIdentifier("sharedExpensesEntry")
                 }
-                Divider()
-                NavigationLink { SharedExpensesView() } label: {
-                    entryRow("Shared expenses", symbol: "person.2") {
-                        if sharedCurrencies.isEmpty { Text("Keep track of who owes what") }
-                        ForEach(sharedCurrencies, id: \.self) { Text(sharedSummary($0)) }
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("sharedExpensesEntry")
             }
         } else {
             entryLinks
@@ -371,6 +380,10 @@ struct PersonalTrackingEntryPoints: View {
     private var sharedCurrencies: [Currency] {
         Set(expenses.filter { !$0.isArchived }.compactMap { try? $0.input.currency })
             .sorted { $0.stableIdentifier < $1.stableIdentifier }
+    }
+
+    private var activeFunds: [SinkingFund] {
+        funds.filter { $0.stateRaw != "archived" }.sorted { $0.name < $1.name }
     }
 
     private var fundCurrencies: [Currency] {

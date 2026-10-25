@@ -8,7 +8,7 @@ import CairnCore
 ///
 /// The list draws from precomputed ``TransactionMonthSection`` values: the
 /// grouping and totals are done once, and each element is keyed by the row's
-/// stable composite id and emits exactly one view (divider included), so
+/// stable stored-record identity and emits exactly one view (divider included), so
 /// SwiftUI never has to build views to gather identities.
 struct TransactionDayList: View {
     let sections: [TransactionMonthSection]

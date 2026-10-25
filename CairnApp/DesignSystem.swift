@@ -58,6 +58,8 @@ enum CairnTheme {
     /// A wider canvas for dashboards that can form multiple columns on iPad
     /// and Mac while remaining a single column on iPhone.
     static let dashboardMaxWidth: CGFloat = 1_080
+    /// Desktop dashboards use columns across the window instead of a phone-width strip.
+    static let desktopMaxWidth: CGFloat = 1_440
 
     // MARK: Spacing
 
@@ -290,6 +292,10 @@ struct ScreenSectionHeader<Trailing: View>: View {
             }
             Spacer(minLength: CairnTheme.Spacing.s)
             trailing
+                #if os(macOS)
+                .buttonStyle(.plain)
+                .foregroundStyle(CairnTheme.accent)
+                #endif
         }
         .padding(.horizontal, 4)
     }
