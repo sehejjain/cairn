@@ -99,6 +99,37 @@ final class PersonalTrackingUITests: XCTestCase {
     }
 
     @MainActor
+    func testReviewedDuplicateAccountsCanBeCombined() {
+        let app = launchSampleApp(extraArguments: ["--cairn-sample-duplicate-accounts"])
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["settingsEntry"].waitForExistence(timeout: 15))
+        open(app.buttons["settingsEntry"], in: app)
+        open(app.buttons["settings.duplicateAccounts"], in: app)
+        XCTAssertTrue(app.navigationBars["Duplicate Accounts"].waitForExistence(timeout: 5))
+        let combine = app.buttons["duplicateAccounts.combineCopies"].firstMatch
+        open(combine, in: app)
+        let confirm = app.buttons["duplicateAccounts.confirmCombine"].firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        let cancel = app.buttons["Cancel"]
+        if cancel.exists {
+            cancel.tap()
+        } else {
+            // Native confirmation popovers dismiss when tapping outside.
+            app.navigationBars["Duplicate Accounts"]
+                .coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).tap()
+        }
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(combine.exists, "Cancelling keeps the account copies separate")
+        open(combine, in: app)
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(app.staticTexts["Combined 2 copies into one account."].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["No duplicate accounts found"].exists)
+        XCTAssertFalse(combine.exists)
+        capture("Duplicate accounts combined", app: app)
+    }
+
+    @MainActor
     func testStandaloneSharedExpenseAndPartialRepayment() {
         let app = launchSampleApp()
         defer { app.terminate() }
@@ -162,13 +193,13 @@ final class PersonalTrackingUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchSampleApp() -> XCUIApplication {
+    private func launchSampleApp(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
             "--cairn-sample-data", "-cairn-disable-cloudkit",
             "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
             "-cairn.tabOrder", "", "-cairn.hiddenTabs", "", "-cairn-tab", "home",
-        ]
+        ] + extraArguments
         app.launch()
         return app
     }
@@ -217,7 +248,17 @@ final class PersonalTrackingUITests: XCTestCase {
         for _ in 0..<14 {
             if element.exists && element.isHittable { break }
             let editor = app.scrollViews["trackingEditorScroll"]
-            let scroll = editor.exists ? editor : app.scrollViews.firstMatch
+            let scroll: XCUIElement
+            if editor.exists {
+                scroll = editor
+            } else if app.scrollViews.firstMatch.exists {
+                scroll = app.scrollViews.firstMatch
+            } else if app.collectionViews.firstMatch.exists {
+                scroll = app.collectionViews.firstMatch
+            } else {
+                scroll = app.tables.firstMatch
+            }
+            XCTAssertTrue(scroll.exists, "The current screen needs a scrollable container")
             let top = max(scroll.frame.minY, app.frame.minY + 120)
             let keyboard = app.keyboards.firstMatch
             let bottom = keyboard.exists ? keyboard.frame.minY : min(scroll.frame.maxY, app.frame.maxY - 100)

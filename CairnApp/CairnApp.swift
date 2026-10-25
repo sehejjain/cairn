@@ -80,7 +80,9 @@ struct CairnApp: App {
                     StoreUnavailableView()
                 } else {
                     LockGate {
-                        SettingsView()
+                        NavigationStack {
+                            SettingsView()
+                        }
                     }
                     .modelContainer(model.container)
                 }

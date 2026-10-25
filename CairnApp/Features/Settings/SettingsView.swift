@@ -58,6 +58,7 @@ struct SettingsView: View {
             syncSection
             alertsSection
             institutionsSection
+            duplicateAccountsSection
             categorizationSection
             featuresSection
             organizationSection
@@ -329,6 +330,24 @@ struct SettingsView: View {
             if !institutions.isEmpty {
                 Text("Swipe an institution to disconnect it.")
             }
+        }
+    }
+
+    private var duplicateAccountsSection: some View {
+        Section {
+            NavigationLink {
+                DuplicateAccountsView()
+            } label: {
+                IconRow(
+                    "Duplicate Accounts",
+                    subtitle: "Review and combine repeated SimpleFIN accounts",
+                    systemImage: "doc.on.doc",
+                    tint: CairnTheme.warning
+                )
+            }
+            .accessibilityIdentifier("settings.duplicateAccounts")
+        } header: {
+            Text("Account repair")
         }
     }
 

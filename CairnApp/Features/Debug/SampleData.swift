@@ -310,6 +310,22 @@ enum SampleData {
             context.insert(CategoryBudget(categoryUUID: item.uuid, monthKey: BudgetCalculator.monthKey(for: now),
                                           amountMinorUnits: amount, timeZoneIdentifier: TimeZone.current.identifier))
         }
+        if ProcessInfo.processInfo.arguments.contains("--cairn-sample-duplicate-accounts") {
+            let duplicate = Account(bankAccountID: savings.bankAccountID, name: savings.name, currency: .usd)
+            duplicate.accountTypeRaw = savings.accountTypeRaw
+            duplicate.balanceMinorUnits = savings.balanceMinorUnits - 10_000
+            duplicate.lastSyncedAt = now.addingTimeInterval(-60)
+            duplicate.institution = institution
+            context.insert(duplicate)
+            let history = LedgerTransaction(
+                bankTransactionID: "TXN-DUPLICATE-HISTORY", payeeDescription: "Savings deposit", amountMinorUnits: 10_000
+            )
+            history.account = duplicate
+            history.accountIDIndex = savings.bankAccountID
+            history.postedDate = calendar.date(byAdding: .day, value: -60, to: now)
+            history.note = "Retain this history"
+            context.insert(history)
+        }
         try? context.save()
     }
 

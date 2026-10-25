@@ -158,15 +158,26 @@ struct BudgetView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
+                #if os(macOS)
+                HStack {
+                    monthPicker
+                    Spacer(minLength: CairnTheme.Spacing.l)
+                    if currencies.count > 1 { currencyPicker.fixedSize() }
+                }
+                #else
                 monthPicker
                 if currencies.count > 1 {
                     currencyPicker
                 }
+                #endif
                 if monthKey == BudgetCalculator.monthKey(for: .now, timeZone: budgetTimeZone),
                    !currencyAccounts.isEmpty,
                    !snapshot.lines.contains(where: { $0.plannedMinorUnits != nil }) {
                     recommendationButton
                 }
+                #if os(macOS)
+                desktopBudgetContent(snapshot)
+                #else
                 if currencyAccounts.isEmpty {
                     GetStartedEmptyState(
                         systemImage: "chart.pie",
@@ -176,19 +187,7 @@ struct BudgetView: View {
                 } else if isLoading {
                     ProgressView().frame(maxWidth: .infinity).padding(.vertical, 28)
                 } else if loadFailed {
-                    VStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.largeTitle)
-                            .foregroundStyle(CairnTheme.accent)
-                        Text("Spending unavailable")
-                            .font(.headline)
-                        Text("Cairn couldn't load this month's transactions.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Button("Try again") { reloadToken &+= 1 }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
+                    spendingUnavailableState
                 } else {
                     summaryCard(snapshot)
                     categoryList(snapshot)
@@ -196,22 +195,14 @@ struct BudgetView: View {
                         unbudgetedCard(snapshot)
                     }
                 }
-                NavigationLink { SinkingFundsView() } label: {
-                    FlowSection {
-                        HStack(spacing: CairnTheme.Spacing.m) {
-                            TrackingSymbol(name: "tray.and.arrow.down")
-                            VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
-                                Text("Sinking funds").font(.headline)
-                                Text("Set money aside for future expenses").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
-                            Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
+                sinkingFundsLink
+                #endif
             }
+            #if os(macOS)
+            .cairnScreen(maxWidth: CairnTheme.desktopMaxWidth)
+            #else
             .cairnScreen()
+            #endif
         }
         .cairnScrollEdge()
         .cairnCanvas()
@@ -337,17 +328,29 @@ struct BudgetView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .foregroundStyle(.primary)
+                    #if os(macOS)
+                    .frame(width: 20, height: 20)
+                    #else
                     .frame(width: 36, height: 36)
+                    #endif
             }
+            #if os(macOS)
+            .buttonStyle(.bordered)
+            #else
             .buttonStyle(.glass(.regular))
+            #endif
             .foregroundStyle(.primary)
             .accessibilityLabel("Previous month")
 
+            #if !os(macOS)
             Spacer()
+            #endif
             Text(displayMonthDate.formatted(.dateTime.month(.wide).year()))
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
+            #if !os(macOS)
             Spacer()
+            #endif
 
             Button {
                 if let next = BudgetCalculator.shiftMonth(monthKey, by: 1, timeZone: budgetTimeZone) {
@@ -356,13 +359,95 @@ struct BudgetView: View {
             } label: {
                 Image(systemName: "chevron.right")
                     .foregroundStyle(.primary)
+                    #if os(macOS)
+                    .frame(width: 20, height: 20)
+                    #else
                     .frame(width: 36, height: 36)
+                    #endif
             }
+            #if os(macOS)
+            .buttonStyle(.bordered)
+            #else
             .buttonStyle(.glass(.regular))
+            #endif
             .foregroundStyle(.primary)
             .accessibilityLabel("Next month")
         }
         .padding(.horizontal, 4)
+    }
+
+    #if os(macOS)
+    @ViewBuilder
+    private func desktopBudgetContent(_ data: BudgetSnapshot) -> some View {
+        if currencyAccounts.isEmpty {
+            FlowColumns(primaryFraction: 0.64, minimumColumnWidth: 360) {
+                GetStartedEmptyState(
+                    systemImage: "chart.pie",
+                    title: "No accounts in this currency",
+                    message: "Add or unhide an account to plan spending in this currency."
+                )
+            } secondary: {
+                sinkingFundsLink
+            }
+        } else if isLoading {
+            FlowColumns(primaryFraction: 0.64, minimumColumnWidth: 360) {
+                ProgressView().frame(maxWidth: .infinity).padding(.vertical, 28)
+            } secondary: {
+                sinkingFundsLink
+            }
+        } else if loadFailed {
+            FlowColumns(primaryFraction: 0.64, minimumColumnWidth: 360) {
+                spendingUnavailableState
+            } secondary: {
+                sinkingFundsLink
+            }
+        } else {
+            FlowColumns(primaryFraction: 0.64, minimumColumnWidth: 360) {
+                categoryList(data)
+            } secondary: {
+                VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
+                    summaryCard(data)
+                    if data.unbudgetedMinorUnits != 0 {
+                        unbudgetedCard(data)
+                    }
+                    sinkingFundsLink
+                }
+            }
+        }
+    }
+    #endif
+
+    private var spendingUnavailableState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.largeTitle)
+                .foregroundStyle(CairnTheme.accent)
+            Text("Spending unavailable")
+                .font(.headline)
+            Text("Cairn couldn't load this month's transactions.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Button("Try again") { reloadToken &+= 1 }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 32)
+    }
+
+    private var sinkingFundsLink: some View {
+        NavigationLink { SinkingFundsView() } label: {
+            FlowSection {
+                HStack(spacing: CairnTheme.Spacing.m) {
+                    TrackingSymbol(name: "tray.and.arrow.down")
+                    VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
+                        Text("Sinking funds").font(.headline)
+                        Text("Set money aside for future expenses").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private func summaryCard(_ data: BudgetSnapshot) -> some View {
@@ -402,9 +487,17 @@ struct BudgetView: View {
             Text("Categories")
                 .font(.title3.weight(.semibold))
                 .padding(.horizontal, 4)
+            #if os(macOS)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), alignment: .top)], alignment: .leading, spacing: 16) {
+                ForEach(data.lines) { line in
+                    categoryRow(line, month: displayMonthDate, currency: data.currency)
+                }
+            }
+            #else
             ForEach(data.lines) { line in
                 categoryRow(line, month: displayMonthDate, currency: data.currency)
             }
+            #endif
         }
     }
 
