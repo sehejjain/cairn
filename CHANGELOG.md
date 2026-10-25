@@ -6,6 +6,8 @@ All notable changes to Cairn are documented here. This project follows
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-25
+
 ### Changed
 
 - Simplify Activity filters to text tabs with a clear selection indicator.
