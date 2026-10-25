@@ -8,6 +8,7 @@ All notable changes to Cairn are documented here. This project follows
 
 ### Changed
 
+- Simplify Activity filters to text tabs with a clear selection indicator.
 - Introduce the Flow design with Today, Activity, Plan, and Wealth destinations,
   a warm background, cobalt accents, and open layouts with aligned financial rows.
 - Bring monthly spending and net-worth line charts to Today. Scrub a chart to
@@ -25,6 +26,8 @@ All notable changes to Cairn are documented here. This project follows
 
 ### Fixed
 
+- Use the account currency when investment positions report a blank currency.
+  Previously imported positions are corrected on their next sync.
 - Keep distinct transaction records as separate rows when imported bank IDs collide.
 - Request App Group authorization when signing Mac builds so they can open
   the existing shared data store.

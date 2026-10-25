@@ -76,6 +76,21 @@ struct SimpleFINProtocolTests {
         #expect(pending.postedDate == nil)
     }
 
+    @Test("Treats missing and blank account currencies as USD")
+    func blankAccountCurrenciesDefaultToUSD() throws {
+        let currencyFields = ["", "null", "\"\"", "\"   \"", "\" USD \""]
+
+        for field in currencyFields {
+            let json = """
+            { "accounts": [ { "id": "A", "balance": "1.23" \(field.isEmpty ? "" : ", \"currency\": \(field)") } ] }
+            """
+            let dto = try JSONDecoder().decode(SimpleFINAccountSetDTO.self, from: Data(json.utf8))
+            let account = try #require(dto.toDomain().accounts.first)
+            #expect(account.currency.code == "USD")
+            #expect(account.balanceMinorUnits == 123)
+        }
+    }
+
     @Test("Treats custom currency URLs as custom currencies")
     func customCurrency() throws {
         let json = """
@@ -196,6 +211,56 @@ struct SimpleFINProtocolTests {
         #expect(holding.currency.code == "EUR")
         #expect(holding.marketValueMinorUnits == 120_000)
         #expect(holding.costBasisMinorUnits == nil)
+    }
+
+    @Test("Blank holding currencies inherit the account currency")
+    func blankHoldingCurrenciesInheritAccountCurrency() throws {
+        let holdingCurrencyFields = ["", "null", "\"\"", "\"  \""]
+
+        for field in holdingCurrencyFields {
+            let json = """
+            {
+              "accounts": [
+                { "id": "A", "currency": "JPY", "holdings": [
+                  { "id": "H", "market_value": "1234" \(field.isEmpty ? "" : ", \"currency\": \(field)") }
+                ] }
+              ]
+            }
+            """
+            let dto = try JSONDecoder().decode(SimpleFINAccountSetDTO.self, from: Data(json.utf8))
+            let holding = try #require(dto.toDomain().accounts.first?.holdings.first)
+            #expect(holding.currency.code == "JPY")
+            #expect(holding.currency.exponent == 0)
+            #expect(holding.marketValueMinorUnits == 1_234)
+        }
+    }
+
+    @Test("Blank holdings inherit a custom account descriptor")
+    func blankHoldingCurrencyInheritsCustomDescriptor() throws {
+        let json = """
+        {
+          "accounts": [
+            { "id": "A", "currency": " https://example.com/cui/award ", "holdings": [
+              { "id": "H", "market_value": "1.234", "currency": "   " }
+            ] }
+          ]
+        }
+        """
+        let dto = try JSONDecoder().decode(SimpleFINAccountSetDTO.self, from: Data(json.utf8))
+        let descriptor = Currency(
+            code: "https://example.com/cui/award",
+            exponent: 3,
+            isCustom: true,
+            customName: "Award Miles",
+            customAbbreviation: "mi"
+        )
+        let account = try #require(
+            dto.toDomain(customCurrencies: ["https://example.com/cui/award": descriptor]).accounts.first
+        )
+        let holding = try #require(account.holdings.first)
+        #expect(account.currency.customName == "Award Miles")
+        #expect(holding.currency.customName == "Award Miles")
+        #expect(holding.marketValueMinorUnits == 1_234)
     }
 
     @Test("A custom currency uses its fetched descriptor")
