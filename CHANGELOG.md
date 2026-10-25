@@ -8,12 +8,21 @@ All notable changes to Cairn are documented here. This project follows
 
 ### Changed
 
-- Refresh Home, Activity, Insights, and Investments with clearer financial
-  summaries, quieter surfaces, and more readable account and transaction rows.
-- Bring accounts directly below net worth on Home and group planning tools
-  together. Simplify month selection in Insights.
-- Adapt summary controls and financial rows to larger text sizes while retaining
-  native iOS navigation and Liquid Glass controls.
+- Introduce the Flow design with Today, Activity, Plan, and Wealth destinations,
+  a warm background, cobalt accents, and open layouts with aligned financial rows.
+- Bring monthly spending and net-worth line charts to Today. Scrub a chart to
+  see the selected date and amount in its headline.
+- Show expense categories as an interactive donut alongside a readable breakdown,
+  with spending pace and monthly trend lines in Spending detail.
+- Organize budgets, upcoming payments, funds, and shared expenses in Plan;
+  bring account balances and investments together in Wealth.
+- Adapt financial summaries and chart controls to larger text while retaining
+  native iOS navigation and Liquid Glass controls. Keep Settings in the toolbar.
+
+### Fixed
+
+- Request App Group authorization when signing Mac builds so they can open
+  the existing shared data store.
 
 ## [1.5.1] - 2026-10-24
 

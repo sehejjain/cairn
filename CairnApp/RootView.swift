@@ -111,26 +111,28 @@ private struct BannerView: View {
 /// The app's top-level destinations, shared by the iOS tab bar and the macOS
 /// sidebar so both platforms have the same information architecture.
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
-    case home, activity, insights, investments, settings
+    case home, activity, plan, investments, insights, settings
 
     var id: String { rawValue }
 
     var title: LocalizedStringKey {
         switch self {
-        case .home: "Home"
+        case .home: "Today"
         case .activity: "Activity"
-        case .insights: "Insights"
-        case .investments: "Investments"
+        case .plan: "Plan"
+        case .insights: "Spending"
+        case .investments: "Wealth"
         case .settings: "Settings"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .home: "house.fill"
+        case .home: "sun.max.fill"
         case .activity: "list.bullet.rectangle.fill"
-        case .insights: "chart.bar.xaxis"
-        case .investments: "chart.line.uptrend.xyaxis"
+        case .plan: "calendar"
+        case .insights: "chart.pie"
+        case .investments: "building.columns.fill"
         case .settings: "gearshape.fill"
         }
     }
@@ -153,8 +155,9 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .home: HomeView()
         case .activity: TransactionsView()
+        case .plan: HomeView(destination: .plan)
         case .insights: InsightsView()
-        case .investments: InvestmentsView()
+        case .investments: HomeView(destination: .wealth)
         case .settings: SettingsView()
         }
     }
@@ -174,8 +177,9 @@ struct TabLayout {
         var seen: Set<AppSection> = []
         orderedSections = (savedOrder + AppSection.allCases).filter { seen.insert($0).inserted }
 
-        var hidden = Set(hiddenRaw.split(separator: ",").compactMap { AppSection(rawValue: String($0)) })
-        hidden.remove(.settings)
+        var hidden: Set<AppSection> = orderRaw.isEmpty && hiddenRaw.isEmpty
+            ? [.insights, .settings]
+            : Set(hiddenRaw.split(separator: ",").compactMap { AppSection(rawValue: String($0)) })
         if AppSection.allCases.filter({ $0 != .settings && !hidden.contains($0) }).isEmpty {
             hidden.remove(.home)
         }
@@ -209,7 +213,19 @@ struct MainTabView: View {
         TabView(selection: $selection) {
             ForEach(sections) { section in
                 Tab(section.title, systemImage: section.systemImage, value: section) {
-                    NavigationStack { section.destination }
+                    NavigationStack {
+                        section.destination
+                            .toolbar {
+                                if section != .settings {
+                                    ToolbarItem(placement: .topBarLeading) {
+                                        NavigationLink { SettingsView() } label: {
+                                            Label("Settings", systemImage: "gearshape")
+                                        }
+                                        .accessibilityIdentifier("settingsEntry")
+                                    }
+                                }
+                            }
+                    }
                 }
             }
         }
@@ -218,7 +234,7 @@ struct MainTabView: View {
         .tabViewStyle(.sidebarAdaptable)
         .cairnDefaultTabBarPlacement()
         .tabBarMinimizeBehavior(.onScrollDown)
-        .onChange(of: sections) { _, visible in
+        .onChange(of: sections, initial: true) { _, visible in
             if !visible.contains(selection) { selection = visible.first ?? .settings }
         }
     }
@@ -254,10 +270,21 @@ struct MainShellView: View {
             }
             .navigationSplitViewColumnWidth(min: 200, ideal: 220)
         } detail: {
-            NavigationStack { selection.destination }
+            NavigationStack {
+                selection.destination
+                    .toolbar {
+                        if selection != .settings {
+                            ToolbarItem {
+                                NavigationLink { SettingsView() } label: {
+                                    Label("Settings", systemImage: "gearshape")
+                                }
+                            }
+                        }
+                    }
+            }
         }
         .frame(minWidth: 900, minHeight: 600)
-        .onChange(of: sections) { _, visible in
+        .onChange(of: sections, initial: true) { _, visible in
             if !visible.contains(selection) { selection = visible.first ?? .settings }
         }
     }

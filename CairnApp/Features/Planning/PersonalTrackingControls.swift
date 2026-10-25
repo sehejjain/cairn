@@ -234,11 +234,69 @@ struct TrackingBankReference: View {
 }
 
 struct PersonalTrackingEntryPoints: View {
+    var showsFundDetails = false
     @Query private var expenses: [SharedExpense]
     @Query private var payments: [SharedExpensePayment]
     @Query private var funds: [SinkingFund]
     @Query private var entries: [SinkingFundEntry]
     var body: some View {
+        if showsFundDetails {
+            FlowSection {
+                ScreenSectionHeader("Funds") {
+                    NavigationLink { SinkingFundsView() } label: {
+                        Text("Manage").font(.subheadline).frame(minHeight: 44)
+                    }
+                    .accessibilityIdentifier("sinkingFundsEntry")
+                }
+                if funds.allSatisfy({ $0.stateRaw == "archived" }) {
+                    Text("Set money aside for what's ahead.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                ForEach(funds.filter { $0.stateRaw != "archived" }.sorted { $0.name < $1.name }) { fund in
+                    NavigationLink { SinkingFundDetail(fundID: fund.uuid) } label: {
+                        fundRow(fund)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Divider()
+                NavigationLink { SharedExpensesView() } label: {
+                    entryRow("Shared expenses", symbol: "person.2") {
+                        if sharedCurrencies.isEmpty { Text("Keep track of who owes what") }
+                        ForEach(sharedCurrencies, id: \.self) { Text(sharedSummary($0)) }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("sharedExpensesEntry")
+            }
+        } else {
+            entryLinks
+        }
+    }
+
+    @ViewBuilder
+    private func fundRow(_ fund: SinkingFund) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(fund.name).font(.body.weight(.medium))
+            if let input = try? fund.input,
+               let history = try? entries.filter({ $0.fundID == input.uuid }).map({ try $0.input }),
+               let summary = try? SinkingFundCalculator.summary(for: input, entries: history) {
+                let funded = Money(minorUnits: summary.fundedMinorUnits, currency: input.currency).formatted()
+                let target = Money(minorUnits: input.targetMinorUnits, currency: input.currency).formatted()
+                Text("\(funded) of \(target)")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                ProgressView(value: min(1, max(0, summary.progress))).tint(CairnTheme.accent)
+                    .accessibilityLabel("Fund progress")
+            } else {
+                Text("Fund totals unavailable").font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+        .foregroundStyle(.primary)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var entryLinks: some View {
         RowGroup {
             VStack(spacing: 0) {
                 NavigationLink { SharedExpensesView() } label: {

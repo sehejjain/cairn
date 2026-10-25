@@ -304,6 +304,12 @@ enum SampleData {
         context.insert(paycheck)
 
         try? insertPersonalPlans(context: context, now: now)
+        for (name, amount) in [("Groceries", Int64(60_000)), ("Dining", Int64(30_000)),
+                               ("Shopping", Int64(150_000)), ("Transport", Int64(25_000))] {
+            guard let item = category(name) else { continue }
+            context.insert(CategoryBudget(categoryUUID: item.uuid, monthKey: BudgetCalculator.monthKey(for: now),
+                                          amountMinorUnits: amount, timeZoneIdentifier: TimeZone.current.identifier))
+        }
         try? context.save()
     }
 

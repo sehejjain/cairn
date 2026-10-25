@@ -13,7 +13,7 @@ import CairnCore
 enum CairnTheme {
     // MARK: Brand & semantic color
 
-    /// The brand teal from the app icon; asset-backed so it adapts to dark mode.
+    /// Flow uses cobalt for actions and chart emphasis, with adaptive appearances.
     static let accent = Color.accentColor
     static let positive = Color("CairnPositive")
     static let negative = Color("CairnNegative")
@@ -39,34 +39,12 @@ enum CairnTheme {
     // MARK: Surfaces
 
     /// A card surface that sits above the page background.
-    static var surface: Color {
-        #if os(iOS)
-        Color(uiColor: .secondarySystemGroupedBackground)
-        #else
-        Color(nsColor: .controlBackgroundColor)
-        #endif
-    }
-
-    /// A subtle inset surface used inside cards (tiles, chips, wells).
-    static var surfaceInset: Color {
-        #if os(iOS)
-        Color(uiColor: .tertiarySystemGroupedBackground)
-        #else
-        Color(nsColor: .underPageBackgroundColor)
-        #endif
-    }
-
-    /// The page background behind cards.
-    static var canvas: Color {
-        #if os(iOS)
-        Color(uiColor: .systemGroupedBackground)
-        #else
-        Color(nsColor: .windowBackgroundColor)
-        #endif
-    }
+    static let surface = Color("CairnSurface")
+    static let surfaceInset = Color("CairnSurfaceInset")
+    static let canvas = Color("CairnCanvas")
 
     /// A barely-there separator that reads on any surface.
-    static let hairline = Color.primary.opacity(0.06)
+    static let hairline = Color.primary.opacity(0.10)
     /// A slightly stronger stroke for outlined controls.
     static let outline = Color.primary.opacity(0.10)
 
@@ -122,7 +100,7 @@ enum CairnTheme {
 
 extension Font {
     /// A larger financial figure that continues to follow Dynamic Type.
-    static let cairnHero = Font.system(.largeTitle, weight: .medium).scaled(by: 1.25)
+    static let cairnHero = Font.system(.largeTitle, design: .rounded, weight: .medium).scaled(by: 1.25)
     /// A secondary figure inside a hero or summary.
     static let cairnDisplay = Font.system(.title, design: .default, weight: .semibold)
     /// Section labels above cards.
@@ -143,6 +121,8 @@ struct AmountText: View {
     /// When true, the fractional part is rendered smaller and lighter, which
     /// makes large hero figures read faster.
     var deemphasizeFraction: Bool = false
+    /// Scrubbing charts updates their headline immediately under the finger.
+    var animatesChanges: Bool = true
 
     var body: some View {
         Group {
@@ -156,7 +136,7 @@ struct AmountText: View {
         .monospacedDigit()
         .foregroundStyle(colorOverride ?? .primary)
         .contentTransition(.numericText(value: Double(money.minorUnits)))
-        .animation(reduceMotion ? nil : CairnTheme.Motion.numeric, value: money.minorUnits)
+        .animation(reduceMotion || !animatesChanges ? nil : CairnTheme.Motion.numeric, value: money.minorUnits)
         .lineLimit(1)
         .minimumScaleFactor(0.6)
         .accessibilityLabel(text)

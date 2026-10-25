@@ -185,7 +185,7 @@ struct TransactionRow: View {
         if showsAccount, let accountName = transaction.account?.displayName { parts.append(Text(accountName)) }
         if !transaction.effectiveTags.isEmpty { parts.append(Text(tagSummary(transaction.effectiveTags))) }
         return parts.dropFirst().reduce(parts.first) { result, part in
-            result.map { $0 + Text(" · ") + part }
+            result.map { Text("\($0) · \(part)") }
         }
     }
 
@@ -339,7 +339,7 @@ struct TransactionValueRow: View {
         if showsAccount, let accountName = row.accountName { parts.append(Text(accountName)) }
         if !row.tagNames.isEmpty { parts.append(Text(tagSummary(row.tagNames))) }
         return parts.dropFirst().reduce(parts.first) { result, part in
-            result.map { $0 + Text(" · ") + part }
+            result.map { Text("\($0) · \(part)") }
         }
     }
 
@@ -385,8 +385,7 @@ struct TransactionValueRow: View {
     }
 }
 
-/// A vertical stack of rows inside a card, separated by hairlines that stop
-/// short of the leading glyph, like a well-set table.
+/// Flat ledger rows separated by hairlines, shared across the Flow screens.
 struct RowGroup<Content: View>: View {
     @ViewBuilder var content: Content
 
@@ -394,7 +393,7 @@ struct RowGroup<Content: View>: View {
         VStack(spacing: 0) {
             content
         }
-        .cardSurface()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

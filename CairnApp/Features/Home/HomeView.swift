@@ -2,9 +2,12 @@ import SwiftUI
 import SwiftData
 import CairnCore
 
-/// The landing screen: net worth up top, then every account grouped by
-/// institution. Tapping the hero opens the full net-worth history.
+/// Flow separates daily decisions, planning, and the balance sheet while
+/// sharing the same currency-scoped data and existing editing destinations.
 struct HomeView: View {
+    enum Destination { case today, plan, wealth }
+    var destination: Destination = .today
+
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @AppStorage(AppFeature.budgeting.storageKey) private var budgetingEnabled = AppFeature.budgeting.defaultEnabled
@@ -18,14 +21,17 @@ struct HomeView: View {
     @Query private var categories: [CairnSchemaV4.Category]
     @Query private var budgetSettings: [CategoryBudget]
     @Query private var budgetSmoothingPlans: [BudgetSmoothingPlan]
-    @Query private var commitments: [ConfirmedCommitment]
 
     @State private var showingConnect = false
     @State private var showingManualAccount = false
     @State private var budgetTransactions: [BudgetTransaction] = []
+    @State private var spendingHistory: [FlowChartPoint] = []
+    @State private var spendingSelection: Date?
     @State private var budgetReloadToken = 0
     @State private var didLoadBudgetSummary = false
     @State private var budgetLoadFailed = false
+    @State private var spendingLoadFailed = false
+    @State private var loadedSummaryScope: String?
 
     var body: some View {
         ScrollView {
@@ -36,39 +42,23 @@ struct HomeView: View {
                 }
                 if accounts.isEmpty {
                     emptyState
-                    PersonalTrackingEntryPoints()
+                    PersonalTrackingEntryPoints(showsFundDetails: destination == .plan)
                 } else {
-                    VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
-                        NetWorthHero(accounts: accounts, settings: settings)
-                        syncStatus
+                    switch destination {
+                    case .today: todayContent
+                    case .plan: planContent
+                    case .wealth: wealthContent
                     }
-                    .cairnAppear()
-
-                    SyncIssueCard()
-
-                    VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
-                        ScreenSectionHeader("Accounts") {
-                            Text(accounts.count, format: .number)
-                                .font(.subheadline.monospacedDigit())
-                                .foregroundStyle(.secondary)
-                                .accessibilityLabel("^[\(accounts.count) account](inflect: true)")
-                        }
-                        institutionsSection
-                    }
-                    .cairnAppear(delay: 0.05)
-
-                    planningSection
-                        .cairnAppear(delay: 0.1)
                 }
             }
-            .cairnScreen(maxWidth: CairnTheme.dashboardMaxWidth)
+            .cairnScreen(maxWidth: CairnTheme.screenMaxWidth)
         }
         .cairnScrollEdge()
         .cairnCanvas()
-        .navigationTitle("Home")
+        .navigationTitle(destination == .today ? "Today" : destination == .plan ? "Plan" : "Wealth")
         .toolbar { toolbarContent }
         .task(id: budgetReloadKey) {
-            guard budgetingEnabled else { return }
+            guard destination != .wealth else { return }
             await loadBudgetSummary()
         }
         .task {
@@ -89,68 +79,179 @@ struct HomeView: View {
 
     // MARK: - Sections
 
-    @ViewBuilder
-    private var planningSection: some View {
-        VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
-            ScreenSectionHeader("Planning")
-
-            NavigationLink {
-                ForecastView()
-            } label: {
-                Card {
-                    HStack(spacing: CairnTheme.Spacing.m) {
-                        Image(systemName: "chart.xyaxis.line")
-                            .font(.title3)
-                            .foregroundStyle(CairnTheme.accent)
-                            .frame(width: 32)
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Cash-flow forecast").font(.headline)
-                            Text("Your next 30 days")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
-                    }
-                }
+    private var todayContent: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            HStack {
+                Label("Cairn", systemImage: "mountain.2")
+                    .foregroundStyle(CairnTheme.accent)
+                Spacer()
+                Text(Date.now, format: .dateTime.weekday(.abbreviated).month(.abbreviated).day())
+                    .foregroundStyle(.secondary)
             }
-            .buttonStyle(.pressableCard)
-            if budgetingEnabled || !homeRecurring.isEmpty {
-                DashboardGrid(minimumColumnWidth: 340) {
-                    if budgetingEnabled {
-                        NavigationLink {
-                            BudgetView(
-                                initialMonthKey: budgetMonthKey,
-                                initialCurrency: budgetCurrency
-                            )
-                        } label: {
-                            budgetSummaryCard
-                        }
-                        .buttonStyle(.pressableCard)
-                    }
-
-                    if !homeRecurring.isEmpty {
-                        NavigationLink {
-                            RecurringView()
-                        } label: {
-                            RecurringSummaryCard(
-                                series: homeRecurring,
-                                currency: homeCurrency,
-                                confirmedCount: commitments
-                                    .filter { $0.state == .active && $0.currency == homeCurrency }
-                                    .count
-                            )
-                        }
-                        .buttonStyle(.pressableCard)
-                    }
-                }
+            .font(.subheadline)
+            spendingSummary
+            FlowSection {
+                NetWorthHero(accounts: accounts, settings: settings, compact: true)
             }
-            PersonalTrackingEntryPoints()
+            FlowUpcomingPayments(currency: budgetCurrency)
+            NavigationLink { HomeView(destination: .plan) } label: {
+                FlowLinkRow(title: "Your plan", symbol: "calendar", subtitle: "Budgets, funds, and shared expenses")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("todayPlanEntry")
+            SyncIssueCard()
+            syncStatus
         }
+    }
+
+    private var planContent: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            spendingSummary
+            if budgetingEnabled, let summary = budgetSnapshot {
+                FlowSection {
+                    ScreenSectionHeader("Categories") {
+                        NavigationLink { budgetDestination } label: {
+                            Text("Edit plan").font(.subheadline).frame(minHeight: 44)
+                        }
+                    }
+                    ForEach(summary.lines.filter { $0.plannedMinorUnits != nil || $0.spentMinorUnits > 0 }) { line in
+                        NavigationLink { budgetDestination } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text(line.category.name).font(.body.weight(.medium))
+                                    Spacer(minLength: 8)
+                                    AmountText(money: Money(minorUnits: line.spentMinorUnits, currency: summary.currency))
+                                }
+                                if let planned = line.plannedMinorUnits, planned > 0 {
+                                    ProgressView(value: min(1, max(0, Double(line.spentMinorUnits) / Double(planned))))
+                                        .tint(CairnTheme.accent)
+                                    Text("of \(Money(minorUnits: planned, currency: summary.currency).formatted()) planned")
+                                        .font(.caption).foregroundStyle(.secondary)
+                                } else {
+                                    Text("No limit set").font(.caption).foregroundStyle(.secondary)
+                                }
+                            }
+                            .foregroundStyle(.primary)
+                            .padding(.vertical, 8)
+                            .frame(minHeight: 52)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            FlowUpcomingPayments(currency: budgetCurrency, limit: 6)
+            NavigationLink { ForecastView() } label: {
+                FlowLinkRow(title: "Cash-flow forecast", symbol: "chart.xyaxis.line", subtitle: "Your next 30 days")
+            }
+            .buttonStyle(.plain)
+            PersonalTrackingEntryPoints(showsFundDetails: true)
+        }
+    }
+
+    private var wealthContent: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            NetWorthHero(accounts: accounts, settings: settings)
+            FlowSection {
+                NavigationLink { InvestmentsView() } label: {
+                    FlowLinkRow(title: "Investments", symbol: "chart.line.uptrend.xyaxis",
+                                subtitle: "Reported positions and account balances")
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("investmentDetails")
+            }
+            ScreenSectionHeader("Accounts") {
+                Text(accounts.count, format: .number).font(.subheadline).foregroundStyle(.secondary)
+            }
+            institutionsSection
+            SyncIssueCard()
+            syncStatus
+        }
+    }
+
+    private var budgetDestination: some View {
+        BudgetView(initialMonthKey: budgetMonthKey, initialCurrency: budgetCurrency)
+    }
+
+    @ViewBuilder
+    private var spendingSummary: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if spendingLoadFailed {
+                ContentUnavailableView("Spending unavailable", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                Button("Retry") { budgetReloadToken &+= 1 }
+            } else if didLoadBudgetSummary {
+                let selected = FlowChartPoint.nearest(to: spendingSelection, in: spendingHistory)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(selected == nil ? "Spent this month" : "Spent through")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    AmountText(money: Money(minorUnits: selected?.minorUnits ?? spendingHistory.last?.minorUnits ?? 0,
+                                            currency: budgetCurrency),
+                               font: destination == .today ? .cairnHero : .cairnDisplay,
+                               deemphasizeFraction: true, animatesChanges: false)
+                        .accessibilityIdentifier("spendingHeadlineAmount")
+                    Group {
+                        if let selected {
+                            Text(selected.date, format: .dateTime.month(.abbreviated).day().year())
+                        } else {
+                            Text(Date.now, format: .dateTime.month(.wide).year())
+                        }
+                    }
+                    .font(.subheadline).foregroundStyle(.secondary)
+                }
+                if budgetingEnabled, let summary = budgetSnapshot, summary.plannedMinorUnits > 0 {
+                    ViewThatFits(in: .horizontal) {
+                        HStack {
+                            Text("Planned categories").font(.subheadline.weight(.medium))
+                            Spacer(minLength: 8)
+                            remainingText(summary)
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Planned categories").font(.subheadline.weight(.medium))
+                            remainingText(summary)
+                        }
+                    }
+                    FlowBudgetRuler(spent: summary.budgetedSpentMinorUnits, planned: summary.plannedMinorUnits,
+                                    currency: summary.currency)
+                    if summary.unbudgetedMinorUnits > 0 {
+                        let unplanned = Money(minorUnits: summary.unbudgetedMinorUnits, currency: summary.currency).formatted()
+                        Text("\(unplanned) outside planned categories")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                } else if budgetingEnabled, budgetLoadFailed {
+                    HStack {
+                        Text("Budget progress unavailable").font(.subheadline).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Retry") { budgetReloadToken &+= 1 }.frame(minHeight: 44)
+                    }
+                } else if budgetingEnabled {
+                    NavigationLink { budgetDestination } label: {
+                        Label("Set category limits", systemImage: "plus.circle").font(.subheadline)
+                    }
+                    .frame(minHeight: 44)
+                }
+                if destination == .today {
+                    FlowLineChart(points: spendingHistory, currency: budgetCurrency,
+                                  title: "Spending this month", includesZero: true, compact: true,
+                                  selection: $spendingSelection)
+                        .accessibilityIdentifier("todaySpendingChart")
+                }
+            } else {
+                ProgressView("Loading spending").frame(maxWidth: .infinity, minHeight: 100)
+            }
+            NavigationLink { InsightsView() } label: {
+                FlowLinkRow(title: "Spending detail", symbol: "chart.pie")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("spendingDetails")
+        }
+    }
+
+    private func remainingText(_ summary: BudgetSnapshot) -> some View {
+        let amount = Money(minorUnits: MinorUnits.absClamped(summary.remainingMinorUnits), currency: summary.currency).formatted()
+        return Text(summary.remainingMinorUnits < 0 ? "\(amount) over plan" : "\(amount) remaining")
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(summary.remainingMinorUnits < 0 ? CairnTheme.negative : CairnTheme.accent)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var budgetCurrency: Currency {
@@ -176,7 +277,6 @@ struct HomeView: View {
     }
 
     private var budgetReloadKey: String {
-        guard budgetingEnabled else { return "budgeting-disabled" }
         let editStamp = budgetSettings.map(\.modifiedAt).max()?.timeIntervalSince1970 ?? 0
         let smoothingStamp = budgetSmoothingPlans
             .sorted { $0.uuid.uuidString < $1.uuid.uuidString }
@@ -199,6 +299,10 @@ struct HomeView: View {
 
     private var budgetSnapshot: BudgetSnapshot? {
         guard didLoadBudgetSummary, !budgetLoadFailed else { return nil }
+        return makeBudgetSnapshot(budgetTransactions)
+    }
+
+    private func makeBudgetSnapshot(_ transactions: [BudgetTransaction]) -> BudgetSnapshot {
         let categoryValues = categories.map {
             BudgetCategory(
                 uuid: $0.uuid,
@@ -223,7 +327,7 @@ struct HomeView: View {
             )
         }
         return BudgetCalculator.snapshot(
-            transactions: budgetTransactions,
+            transactions: transactions,
             categories: categoryValues,
             settings: settingValues,
             monthKey: budgetMonthKey,
@@ -232,176 +336,20 @@ struct HomeView: View {
         )
     }
 
-    private var budgetSummaryCard: some View {
-        Card(padding: 14) {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 10) {
-                    budgetSummaryHeader
-                    budgetSummaryDetails
-                }
-            } else {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 7) {
-                        budgetSummaryHeader
-                        budgetSummaryDetails
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Spacer(minLength: 4)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                        .padding(.top, 7)
-                }
-            }
-        }
-        .accessibilityElement(children: .combine)
-    }
-
-    private var budgetSummaryHeader: some View {
-        HStack(alignment: .top, spacing: 7) {
-            SettingsIcon(systemImage: "chart.pie.fill", tint: CairnTheme.accent)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Monthly budget")
-                    .font(.subheadline.weight(.semibold))
-                if Set(accounts.map(\.currency)).count > 1 {
-                    Text(budgetCurrency.code)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var budgetSummaryDetails: some View {
-        if budgetLoadFailed {
-            Text("Spending unavailable. Open Budget to retry.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        } else if let summary = budgetSnapshot {
-            if summary.lines.contains(where: { $0.plannedMinorUnits != nil }) {
-                plannedBudgetDetails(summary)
-            } else {
-                noLimitsDetails(summary)
-            }
-        } else {
-            HStack(spacing: 8) {
-                ProgressView()
-                    .controlSize(.small)
-                    .accessibilityHidden(true)
-                Text("Loading budget")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
-        }
-    }
-
-    private func plannedBudgetDetails(_ summary: BudgetSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            budgetStatusText(summary)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            let plannedSpent = Money(
-                minorUnits: summary.budgetedSpentMinorUnits,
-                currency: summary.currency
-            ).formatted()
-            let planned = Money(
-                minorUnits: summary.plannedMinorUnits,
-                currency: summary.currency
-            ).formatted()
-            Text("\(plannedSpent) of \(planned) planned")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if summary.plannedMinorUnits > 0 {
-                ProgressView(value: budgetProgress(summary))
-                    .tint(summary.remainingMinorUnits < 0 ? CairnTheme.warning : CairnTheme.accent)
-                    .accessibilityLabel("Monthly budget progress")
-                    .accessibilityValue(Text("\(plannedSpent) of \(planned) planned"))
-            }
-
-            if summary.unbudgetedMinorUnits != 0 {
-                if dynamicTypeSize.isAccessibilitySize {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Spending outside limits")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        budgetUnbudgetedAmount(summary)
-                    }
-                } else {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text("Spending outside limits")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 4)
-                        budgetUnbudgetedAmount(summary)
-                    }
-                }
-            }
-        }
-    }
-
-    private func budgetUnbudgetedAmount(_ summary: BudgetSnapshot) -> some View {
-        AmountText(
-            money: Money(
-                minorUnits: summary.unbudgetedMinorUnits,
-                currency: summary.currency
-            ),
-            font: .caption.weight(.medium)
-        )
-    }
-
-    private func noLimitsDetails(_ summary: BudgetSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("No category limits yet")
-                .font(.subheadline.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
-            Text("\(Money(minorUnits: summary.spentMinorUnits, currency: summary.currency).formatted()) net spending this month")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Set category limits")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(CairnTheme.accent)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func budgetStatusText(_ summary: BudgetSnapshot) -> Text {
-        let remaining = summary.remainingMinorUnits
-        let amount = Money(
-            minorUnits: MinorUnits.absClamped(remaining),
-            currency: summary.currency
-        ).formatted()
-        return remaining < 0
-            ? Text("\(amount) over planned limits")
-            : Text("\(amount) left in planned categories")
-    }
-
-    private func budgetProgress(_ summary: BudgetSnapshot) -> Double {
-        guard summary.plannedMinorUnits > 0 else { return 0 }
-        return min(
-            1,
-            max(0, Double(summary.budgetedSpentMinorUnits) / Double(summary.plannedMinorUnits))
-        )
-    }
-
     private func loadBudgetSummary() async {
-        didLoadBudgetSummary = false
+        let scope = "\(budgetCurrency.stableIdentifier):\(budgetMonthKey)"
+        // A background save must not remove the chart under an active drag.
+        // Currency or month changes still hide the old scope while loading.
+        if loadedSummaryScope != scope { didLoadBudgetSummary = false }
         budgetLoadFailed = false
+        spendingLoadFailed = false
         let visible = accounts.filter { $0.currency == budgetCurrency }
         guard !visible.isEmpty,
               let start = BudgetCalculator.startOfMonth(budgetMonthKey, timeZone: budgetTimeZone) else {
             budgetTransactions = []
+            spendingHistory = []
             didLoadBudgetSummary = true
+            loadedSummaryScope = scope
             return
         }
         var calendar = Calendar(identifier: .gregorian)
@@ -412,6 +360,14 @@ struct HomeView: View {
         let fetcher = await Task.detached(priority: .utility) {
             BudgetFetcher(modelContainer: container)
         }.value
+        let insightsFetcher = await Task.detached(priority: .utility) {
+            InsightsFetcher(modelContainer: container)
+        }.value
+        let insightScopes = visible.map {
+            InsightAccountScope(bankAccountID: $0.bankAccountID, displayName: $0.displayName)
+        }
+        let spendingStart = Calendar.current.dateInterval(of: .month, for: .now)?.start ?? .now
+        async let spendingRows = insightsFetcher.insightTransactions(scopes: insightScopes, earliest: spendingStart)
         do {
             let result = try await fetcher.budgetTransactions(
                 scopes: scopes,
@@ -426,7 +382,28 @@ struct HomeView: View {
             budgetTransactions = []
             budgetLoadFailed = true
         }
+        do {
+            let rows = try await spendingRows
+            guard !Task.isCancelled else { return }
+            updateSpendingHistory(rows)
+        } catch {
+            guard !Task.isCancelled else { return }
+            spendingHistory = []
+            spendingLoadFailed = true
+        }
         didLoadBudgetSummary = true
+        loadedSummaryScope = scope
+    }
+
+    /// Actual spending uses the same ledger calculator as Spending detail.
+    /// Budget smoothing affects the plan ruler, never the cash-spending line.
+    private func updateSpendingHistory(_ rows: [InsightTransaction]) {
+        let calendar = Calendar.current
+        let start = calendar.dateInterval(of: .month, for: .now)?.start ?? .now
+        spendingHistory = InsightsCalculator.cumulativeSpending(transactions: rows, month: start).compactMap { point in
+            guard let date = calendar.date(byAdding: .day, value: point.day - 1, to: start) else { return nil }
+            return FlowChartPoint(date: date, minorUnits: point.amountMinorUnits)
+        }
     }
 
     private var syncStatus: some View {
@@ -574,18 +551,18 @@ struct HomeView: View {
 
     private var emptyState: some View {
         VStack(spacing: CairnTheme.Spacing.l) {
-            HeroCard {
+            VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 10) {
                     Image(systemName: "mountain.2.fill")
                         .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(CairnTheme.inkGlow)
+                        .foregroundStyle(CairnTheme.accent)
                         .accessibilityHidden(true)
                     Text("Welcome to Cairn")
                         .font(.title2.weight(.semibold))
                         .accessibilityAddTraits(.isHeader)
                     Text("Connect a bank, read Apple Wallet, or add an account by hand. Everything stays on your devices.")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.78))
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -678,18 +655,19 @@ struct SyncButton: View {
     }
 }
 
-/// The net-worth hero on Home: the figure, the 30-day change, and a sparkline.
+/// The current net worth, 30-day change, and transaction-derived history.
 struct NetWorthHero: View {
     let accounts: [Account]
     let settings: [AppSettings]
+    var compact = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var chartTransactions: [LedgerTransaction]
+    @State private var selection: Date?
 
-    @State private var selectedIndex: Int?
-
-    init(accounts: [Account], settings: [AppSettings]) {
+    init(accounts: [Account], settings: [AppSettings], compact: Bool = false) {
         self.accounts = accounts
         self.settings = settings
+        self.compact = compact
         _chartTransactions = Query(filter: NetWorthMath.transactionPredicate(days: 30))
     }
 
@@ -703,15 +681,13 @@ struct NetWorthHero: View {
     private var series: [(date: Date, balanceMinorUnits: Int64)] {
         NetWorthMath.series(accounts: accounts, currency: currency, transactions: chartTransactions, days: 30)
     }
-    private var selectedPoint: (date: Date, balanceMinorUnits: Int64)? {
-        guard let selectedIndex, series.indices.contains(selectedIndex) else { return nil }
-        return series[selectedIndex]
+    private var chartPoints: [FlowChartPoint] {
+        series.map { FlowChartPoint(date: $0.date, minorUnits: $0.balanceMinorUnits) }
     }
-
     var body: some View {
         let change = NetWorthMath.change(in: series)
         let split = NetWorthMath.assetsAndLiabilities(accounts: accounts, currency: currency)
-        let shown = selectedPoint?.balanceMinorUnits ?? total
+        let selected = FlowChartPoint.nearest(to: selection, in: chartPoints)
 
         VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
             NavigationLink {
@@ -735,10 +711,12 @@ struct NetWorthHero: View {
                         .foregroundStyle(CairnTheme.accent)
                     }
                     AmountText(
-                        money: Money(minorUnits: shown, currency: currency),
-                        font: .cairnHero,
-                        deemphasizeFraction: true
+                        money: Money(minorUnits: selected?.minorUnits ?? total, currency: currency),
+                        font: compact ? .cairnDisplay : .cairnHero,
+                        deemphasizeFraction: true,
+                        animatesChanges: false
                     )
+                    .accessibilityIdentifier("netWorthHeadlineAmount")
                 }
                 .contentShape(Rectangle())
             }
@@ -746,46 +724,39 @@ struct NetWorthHero: View {
             .accessibilityIdentifier("netWorthDetails")
             .accessibilityHint("Shows your net-worth history and account breakdown")
 
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: CairnTheme.Spacing.s) { changeDescription(change) }
-                VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) { changeDescription(change) }
+            ZStack(alignment: .leading) {
+                let date = (selected?.date ?? .now).formatted(date: .abbreviated, time: .omitted)
+                Text("Balance on \(date)")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .opacity(selected == nil ? 0 : 1)
+                    .accessibilityHidden(selected == nil)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: CairnTheme.Spacing.s) { changeDescription(change) }
+                    VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) { changeDescription(change) }
+                }
+                .opacity(selected == nil ? 1 : 0)
+                .accessibilityHidden(selected != nil)
             }
 
-            if series.count > 2 {
-                Sparkline(
-                    values: series.map { NetWorthMath.doubleValue($0.balanceMinorUnits, currency: currency) },
-                    tint: CairnTheme.accent,
-                    lineWidth: 2.5,
-                    selection: $selectedIndex
-                )
-                .frame(height: 88)
-                .onChange(of: series.count) { _, _ in selectedIndex = nil }
-                .sensoryFeedback(.selection, trigger: selectedIndex)
-
-                HStack {
-                    if let first = series.first {
-                        Text(first.date, format: .dateTime.month(.abbreviated).day())
+            FlowLineChart(
+                points: chartPoints,
+                currency: currency, title: "Net worth history", compact: compact, selection: $selection
+            )
+            .accessibilityIdentifier("netWorthChart")
+            if !compact {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 24) {
+                        heroMetric("Assets", Money(minorUnits: split.assets, currency: currency))
+                        heroMetric("Liabilities", Money(minorUnits: -split.liabilities, currency: currency))
                     }
-                    Spacer()
-                    Text("Today")
+                    .fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 12) {
+                        heroMetric("Assets", Money(minorUnits: split.assets, currency: currency))
+                        heroMetric("Liabilities", Money(minorUnits: -split.liabilities, currency: currency))
+                    }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            }
-
-            Divider()
-
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: CairnTheme.Spacing.xl) {
-                    heroMetric("Assets", Money(minorUnits: split.assets, currency: currency))
-                    heroMetric("Liabilities", Money(minorUnits: -split.liabilities, currency: currency))
-                }
-                .fixedSize(horizontal: true, vertical: false)
-                VStack(alignment: .leading, spacing: CairnTheme.Spacing.m) {
-                    heroMetric("Assets", Money(minorUnits: split.assets, currency: currency))
-                    heroMetric("Liabilities", Money(minorUnits: -split.liabilities, currency: currency))
-                }
+                Text("Balance history is derived from transactions, not investment performance.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             if totals.count > 1 {
                 Text("Plus balances in ^[\(totals.count - 1) other currency](inflect: true)")
@@ -799,11 +770,7 @@ struct NetWorthHero: View {
 
     @ViewBuilder
     private func changeDescription(_ change: (delta: Int64, ratio: Double?)) -> some View {
-        if let selected = selectedPoint {
-            Text("Balance on \(selected.date.formatted(date: .abbreviated, time: .omitted))")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        } else if change.delta == 0 {
+        if change.delta == 0 {
             Text("No change in 30 days")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

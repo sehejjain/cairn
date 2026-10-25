@@ -197,7 +197,7 @@ struct BudgetView: View {
                     }
                 }
                 NavigationLink { SinkingFundsView() } label: {
-                    Card {
+                    FlowSection {
                         HStack(spacing: CairnTheme.Spacing.m) {
                             TrackingSymbol(name: "tray.and.arrow.down")
                             VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
@@ -209,9 +209,9 @@ struct BudgetView: View {
                         }
                     }
                 }
-                .buttonStyle(.pressableCard)
+                .buttonStyle(.plain)
             }
-            .cairnScreen(maxWidth: 920)
+            .cairnScreen()
         }
         .cairnScrollEdge()
         .cairnCanvas()
@@ -366,7 +366,7 @@ struct BudgetView: View {
     }
 
     private func summaryCard(_ data: BudgetSnapshot) -> some View {
-        Card {
+        VStack(alignment: .leading, spacing: 0) {
             let hasLimits = data.lines.contains { $0.plannedMinorUnits != nil }
             let displayedSpent = hasLimits ? data.budgetedSpentMinorUnits : data.spentMinorUnits
             VStack(alignment: .leading, spacing: 12) {
@@ -386,9 +386,8 @@ struct BudgetView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     if data.plannedMinorUnits > 0 {
-                        ProgressView(value: min(1, max(0, Double(data.budgetedSpentMinorUnits) / Double(data.plannedMinorUnits))))
-                            .tint(data.remainingMinorUnits < 0 ? CairnTheme.warning : CairnTheme.accent)
-                            .accessibilityLabel("Monthly budget progress")
+                        FlowBudgetRuler(spent: data.budgetedSpentMinorUnits, planned: data.plannedMinorUnits,
+                                        currency: data.currency)
                     }
                     budgetStatus(data.remainingMinorUnits, currency: data.currency)
                         .font(.subheadline.weight(.semibold))
@@ -410,7 +409,7 @@ struct BudgetView: View {
     }
 
     private func categoryRow(_ line: BudgetLine, month: Date, currency: Currency) -> some View {
-        Card(padding: 12) {
+        FlowSection {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     NavigationLink {
@@ -493,7 +492,7 @@ struct BudgetView: View {
     }
 
     private func unbudgetedCard(_ data: BudgetSnapshot) -> some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Spending without limits")
                     .font(.subheadline.weight(.semibold))

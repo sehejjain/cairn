@@ -82,21 +82,21 @@ struct SharedExpensesView: View {
     @ViewBuilder
     private func summaryCard(_ currency: Currency) -> some View {
         if let totals = totals(currency) {
-            HeroCard {
+            VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
                     HStack {
-                        Text("Owed to you").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.75))
+                        Text("Owed to you").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                         Spacer()
-                        Text(currency.displayLabel).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.65))
+                        Text(currency.displayLabel).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     }
                     AmountText(money: Money(minorUnits: totals.owed, currency: currency), font: .cairnHero,
-                               colorOverride: .white, deemphasizeFraction: true)
-                    Rectangle().fill(.white.opacity(0.12)).frame(height: 1)
+                               deemphasizeFraction: true)
+                    Rectangle().fill(CairnTheme.hairline).frame(height: 1)
                     HStack {
-                        Text("You owe").font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                        Text("You owe").font(.subheadline).foregroundStyle(.secondary)
                         Spacer()
                         AmountText(money: Money(minorUnits: totals.owe, currency: currency),
-                                   font: .headline, colorOverride: .white)
+                                   font: .headline)
                     }
                 }
             }
@@ -198,7 +198,7 @@ struct SharedExpenseDetail: View {
     private func detail(_ input: SharedExpenseInput) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
-                Card(padding: 20) {
+                FlowSection {
                     VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
                         HStack(spacing: CairnTheme.Spacing.m) {
                             TrackingSymbol(name: "person.2", size: 52)
@@ -221,7 +221,7 @@ struct SharedExpenseDetail: View {
                     }
                 }
                 balanceSection(input)
-                Card {
+                FlowSection {
                     VStack(alignment: .leading, spacing: CairnTheme.Spacing.m) {
                         CardHeader("Shares")
                         ForEach(input.participants) { person in
@@ -237,7 +237,7 @@ struct SharedExpenseDetail: View {
                 }
                 historySection(input)
                 if let link = input.bankLink {
-                    Card {
+                    FlowSection {
                         VStack(alignment: .leading, spacing: CairnTheme.Spacing.m) {
                             CardHeader("Attached expense transaction")
                             TrackingBankReference(link: link).font(.subheadline)
@@ -320,7 +320,7 @@ struct SharedExpenseDetail: View {
         VStack(alignment: .leading, spacing: CairnTheme.Spacing.s) {
             SectionLabel(title: "Repayment history")
             if payments.isEmpty {
-                Card { Text("No repayments recorded").font(.subheadline).foregroundStyle(.secondary) }
+                FlowSection { Text("No repayments recorded").font(.subheadline).foregroundStyle(.secondary) }
             } else {
                 RowGroup {
                     ForEach(payments) { payment in

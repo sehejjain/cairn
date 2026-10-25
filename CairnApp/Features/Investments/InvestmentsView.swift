@@ -13,8 +13,8 @@ struct InvestmentsView: View {
     @Query private var settings: [AppSettings]
     @Query private var chartTransactions: [LedgerTransaction]
 
-    @State private var selectedIndex: Int?
     @State private var historyRange: HistoryRange = .ninetyDays
+    @State private var selection: Date?
     @State private var searchText = ""
     @State private var sortOption: HoldingSortOption = .value
     @State private var selectedMixCurrencyID: String?
@@ -59,11 +59,11 @@ struct InvestmentsView: View {
     private var series: [(date: Date, balanceMinorUnits: Int64)] {
         NetWorthMath.series(accounts: investments, currency: currency, transactions: chartTransactions, days: historyRange.days)
     }
-
-    private var selectedPoint: (date: Date, balanceMinorUnits: Int64)? {
-        guard let selectedIndex, series.indices.contains(selectedIndex) else { return nil }
-        return series[selectedIndex]
+    private var chartPoints: [FlowChartPoint] {
+        series.map { FlowChartPoint(date: $0.date, minorUnits: $0.balanceMinorUnits) }
     }
+
+    private var selectedPoint: FlowChartPoint? { FlowChartPoint.nearest(to: selection, in: chartPoints) }
 
     /// The latest date reported by any investment account. Each account also
     /// shows its own update date below.
@@ -122,7 +122,6 @@ struct InvestmentsView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .searchable(text: $searchText, prompt: "Ticker, holding, or account")
-        .onChange(of: historyRange) { _, _ in selectedIndex = nil }
         .onChange(of: portfolioSummaries.map(\.id)) { _, identifiers in
             if let selectedMixCurrencyID, !identifiers.contains(selectedMixCurrencyID) {
                 self.selectedMixCurrencyID = nil
@@ -134,7 +133,6 @@ struct InvestmentsView: View {
 
     private var hero: some View {
         let change = NetWorthMath.change(in: series)
-        let shown = selectedPoint?.balanceMinorUnits ?? totalMinorUnits
 
         return VStack(alignment: .leading, spacing: 14) {
             ViewThatFits(in: .horizontal) {
@@ -152,37 +150,23 @@ struct InvestmentsView: View {
             }
 
             AmountText(
-                money: Money(minorUnits: shown, currency: currency),
+                money: Money(minorUnits: selectedPoint?.minorUnits ?? totalMinorUnits, currency: currency),
                 font: .cairnHero,
-                deemphasizeFraction: true
+                deemphasizeFraction: true,
+                animatesChanges: false
             )
 
             HStack(spacing: 8) {
-                if let selected = selectedPoint {
-                    Text("Balance on \(selected.date.formatted(date: .abbreviated, time: .omitted))")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                } else {
-                    if let ratio = change.ratio {
-                        TrendPill(ratio: ratio, higherIsBad: false)
-                    }
-                    Text(asOfText)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                if let ratio = change.ratio {
+                    TrendPill(ratio: ratio, higherIsBad: false)
                 }
+                Text(asOfText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
-            if series.count > 2 {
-                Sparkline(
-                    values: series.map { NetWorthMath.doubleValue($0.balanceMinorUnits, currency: currency) },
-                    tint: CairnTheme.accent,
-                    lineWidth: 2,
-                    selection: $selectedIndex
-                )
-                .frame(height: 68)
-                .onChange(of: series.count) { _, _ in selectedIndex = nil }
-                .sensoryFeedback(.selection, trigger: selectedIndex)
-            }
+            FlowLineChart(points: chartPoints, currency: currency,
+                          title: "Investment account balance history", selection: $selection)
 
             Text("Transaction-derived account balance history, not investment performance.")
                 .font(.caption)
@@ -191,14 +175,12 @@ struct InvestmentsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, CairnTheme.Spacing.s)
         .cairnAppear()
-        .animation(CairnTheme.Motion.quick, value: selectedIndex)
     }
 
     private var balanceDateLabel: some View {
         Group {
             if let selectedPoint {
-                Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
-                    .contentTransition(.opacity)
+                Text("Balance on \(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))")
             } else {
                 Text("Account balance")
             }
@@ -307,7 +289,7 @@ struct InvestmentsView: View {
     // MARK: - Reported position summaries
 
     private var portfolioSummary: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 14) {
                 CardHeader("Reported positions")
                 ForEach(Array(portfolioSummaries.enumerated()), id: \.element.id) { index, summary in
@@ -327,7 +309,7 @@ struct InvestmentsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(summary.currency.displayLabel)
                         .font(.subheadline.weight(.semibold))
-                    Text("\(summary.positionCount) positions")
+                    Text("^[\(summary.positionCount) position](inflect: true)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -358,7 +340,7 @@ struct InvestmentsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if summary.hasCompleteCostBasis {
-                Text("Cost basis reported for all \(summary.positionCount) positions")
+                Text("Cost basis reported for ^[\(summary.positionCount) position](inflect: true)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -397,7 +379,7 @@ struct InvestmentsView: View {
     // MARK: - Position mix
 
     private var positionMixCard: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     CardHeader("Position mix")
@@ -554,7 +536,7 @@ struct InvestmentsView: View {
     // MARK: - Explainer
 
     private var holdingsEmptyNote: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader("No positions yet")
                 Text("Your bank hasn’t reported any holdings for these accounts. Positions usually arrive with the next sync.")
@@ -575,7 +557,7 @@ struct InvestmentsView: View {
     }
 
     private var aboutCard: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader("How these numbers work")
                 Text("Balances and positions reflect your bank’s last report. Cairn does not fetch live prices.")

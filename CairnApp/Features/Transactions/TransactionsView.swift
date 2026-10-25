@@ -177,7 +177,7 @@ struct TransactionsView: View {
                         if filter.quick == quick.query {
                             quickFilterButton(quick)
                                 .buttonStyle(.glassProminent)
-                                .tint(CairnTheme.ink)
+                                .tint(CairnTheme.accent)
                         } else {
                             quickFilterButton(quick)
                                 .buttonStyle(.glass(.regular))

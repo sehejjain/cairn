@@ -15,11 +15,11 @@ struct TabCustomizationView: View {
                     Toggle(isOn: visibility(for: section)) {
                         Label(section.title, systemImage: section.systemImage)
                     }
-                    .disabled(section == .settings || isLastVisibleDestination(section))
+                    .disabled(isLastVisibleDestination(section))
                 }
                 .onMove(perform: move)
             } footer: {
-                Text("Drag to change the order. Settings stays visible so you can change this later.")
+                Text("Drag to change the order. Settings is always available from the toolbar.")
             }
 
             Section {
@@ -48,9 +48,10 @@ struct TabCustomizationView: View {
                 var hidden = layout.hiddenSections
                 if isVisible {
                     hidden.remove(section)
-                } else if section != .settings && !isLastVisibleDestination(section) {
+                } else if !isLastVisibleDestination(section) {
                     hidden.insert(section)
                 }
+                if orderRaw.isEmpty { orderRaw = TabLayout.encodeOrder(layout.orderedSections) }
                 hiddenRaw = TabLayout.encodeHidden(hidden)
             }
         )
@@ -58,6 +59,7 @@ struct TabCustomizationView: View {
 
     private func move(from source: IndexSet, to destination: Int) {
         var sections = layout.orderedSections
+        hiddenRaw = TabLayout.encodeHidden(layout.hiddenSections)
         sections.move(fromOffsets: source, toOffset: destination)
         orderRaw = TabLayout.encodeOrder(sections)
     }

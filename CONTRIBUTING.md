@@ -20,6 +20,15 @@ run `xcodegen generate`. Add `ICLOUD_CONTAINER_ID` only if your container is not
 `iCloud.<bundle id>`. Never commit team IDs, bundle identifiers, or container
 names; they belong in the local file, not `project.yml`.
 
+Mac builds use provisioned App Groups. Keep automatic signing enabled and
+`REGISTER_APP_GROUPS` set to `YES` for the macOS SDK, as configured in
+`Config/Signing.xcconfig`. After enabling this for an existing setup, allow Xcode
+to update provisioning profiles (or build with `-allowProvisioningUpdates`).
+An older profile can omit the App Group even when the signed app requests it,
+causing sandbox access errors when opening the existing store. Follow Apple's
+[App Group authorization guidance](https://developer.apple.com/documentation/xcode/accessing-app-group-containers);
+do not change the group identifier or delete the store to resolve signing errors.
+
 ## Ground rules
 
 - **No new runtime dependencies.** A zero-dependency app is part of the privacy

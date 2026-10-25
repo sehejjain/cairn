@@ -33,17 +33,18 @@ private struct SettlementCategorySnapshot {
 public actor InsightsFetcher {
     /// Rows at or after `earliest`, mapped to calculator input. Older rows
     /// cannot affect a snapshot, so they are dropped before a value is built.
+    /// Throws if any account fetch fails, rather than returning partial data.
     public func insightTransactions(
         scopes: [InsightAccountScope],
         earliest: Date
-    ) -> [InsightTransaction] {
+    ) throws -> [InsightTransaction] {
         var fetchedRows: [(scope: InsightAccountScope, transaction: LedgerTransaction)] = []
         for scope in scopes {
             let bankAccountID = scope.bankAccountID
             let descriptor = FetchDescriptor<LedgerTransaction>(
                 predicate: #Predicate { $0.accountIDIndex == bankAccountID }
             )
-            guard let transactions = try? modelContext.fetch(descriptor) else { continue }
+            let transactions = try modelContext.fetch(descriptor)
             for transaction in transactions {
                 fetchedRows.append((scope: scope, transaction: transaction))
             }
