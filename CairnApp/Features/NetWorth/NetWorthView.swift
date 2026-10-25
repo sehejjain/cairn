@@ -13,6 +13,7 @@ struct NetWorthView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var range: RangeOption = .ninetyDays
     @State private var selectedDate: Date?
+    @ScaledMetric(relativeTo: .body) private var chartHeight = 220.0
 
     init() {
         _chartTransactions = Query(filter: NetWorthMath.transactionPredicate(days: 365))
@@ -57,15 +58,27 @@ struct NetWorthView: View {
                         message: "Connect a bank and sync to build your net worth history."
                     )
                 } else {
+                    #if os(macOS)
+                    FlowColumns(primaryFraction: 0.6, minimumColumnWidth: 320) {
+                        VStack(alignment: .leading, spacing: 24) {
+                            chartCard
+                            breakdownCard
+                            if totals.count > 1 { currenciesCard }
+                        }
+                    } secondary: {
+                        accountsCard
+                    }
+                    #else
                     chartCard
                     breakdownCard
                     if totals.count > 1 {
                         currenciesCard
                     }
                     accountsCard
+                    #endif
                 }
             }
-            .cairnScreen()
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnCanvas()
         .navigationTitle("Net Worth")
@@ -75,6 +88,14 @@ struct NetWorthView: View {
     }
 
     // MARK: - Data
+
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
 
     private var totals: [CurrencyTotal] { NetWorthMath.totals(accounts: accounts) }
 
@@ -103,45 +124,61 @@ struct NetWorthView: View {
         let change = NetWorthMath.change(in: points)
         let shown = selectedPoint?.balanceMinorUnits ?? currentTotal
 
-        return Card(padding: 20) {
+        return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        if let selectedPoint {
-                            Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.secondary)
-                                .contentTransition(.opacity)
-                        } else {
-                            Text("Today")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.secondary)
-                                .contentTransition(.opacity)
-                        }
-                        Spacer()
-                        SegmentedPicker(options: RangeOption.allCases, selection: $range) { LocalizedStringKey($0.title) }
-                            .frame(maxWidth: 220)
-                    }
+                    chartDate
                     AmountText(
                         money: Money(minorUnits: shown, currency: currency),
                         font: .cairnHero,
-                        deemphasizeFraction: true
+                        deemphasizeFraction: true,
+                        animatesChanges: false
                     )
-                    HStack(spacing: 8) {
-                        if let ratio = change.ratio {
-                            TrendPill(ratio: ratio, higherIsBad: false)
-                        }
-                        Text(changeSentence(change.delta))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("netWorthHistoryAmount")
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) { changeDescription(change) }
+                        VStack(alignment: .leading, spacing: 8) { changeDescription(change) }
                     }
                 }
 
+                rangePicker
                 chart(points)
-                    .frame(height: 220)
+                    .frame(height: chartHeight)
+                    .accessibilityIdentifier("netWorthHistoryChart")
+                Text("Balance history is derived from transactions, not investment performance.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
+        .onChange(of: range) { _, _ in selectedDate = nil }
         .animation(reduceMotion ? nil : CairnTheme.Motion.standard, value: range)
+    }
+
+    private var chartDate: some View {
+        Group {
+            if let selectedPoint {
+                Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
+            } else {
+                Text("Today")
+            }
+        }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(.secondary)
+        .contentTransition(.opacity)
+    }
+
+    private var rangePicker: some View {
+        SegmentedPicker(options: RangeOption.allCases, selection: $range) { LocalizedStringKey($0.title) }
+            .frame(maxWidth: 280)
+    }
+
+    @ViewBuilder
+    private func changeDescription(_ change: (delta: Int64, ratio: Double?)) -> some View {
+        if let ratio = change.ratio {
+            TrendPill(ratio: ratio, higherIsBad: false)
+        }
+        Text(changeSentence(change.delta))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
     }
 
     private func chart(_ points: [(date: Date, balanceMinorUnits: Int64)]) -> some View {
@@ -152,27 +189,13 @@ struct NetWorthView: View {
 
         return Chart {
             ForEach(points, id: \.date) { point in
-                AreaMark(
-                    x: .value("Date", point.date),
-                    yStart: .value("Floor", minValue - pad),
-                    yEnd: .value("Balance", NetWorthMath.doubleValue(point.balanceMinorUnits, currency: currency))
-                )
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [CairnTheme.accent.opacity(0.30), CairnTheme.accent.opacity(0.0)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .interpolationMethod(.monotone)
-
                 LineMark(
                     x: .value("Date", point.date),
                     y: .value("Balance", NetWorthMath.doubleValue(point.balanceMinorUnits, currency: currency))
                 )
                 .foregroundStyle(CairnTheme.accent)
-                .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
-                .interpolationMethod(.monotone)
+                .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                .interpolationMethod(.linear)
             }
 
             if let selected = selectedPoint {
@@ -194,7 +217,7 @@ struct NetWorthView: View {
             }
         }
         .chartYScale(domain: (minValue - pad)...(maxValue + pad))
-        .chartXSelection(value: $selectedDate)
+        .flowChartSelection($selectedDate)
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                 AxisValueLabel(format: .dateTime.month(.abbreviated).day(), anchor: .top)
@@ -202,7 +225,7 @@ struct NetWorthView: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
+            AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
                 AxisGridLine().foregroundStyle(CairnTheme.hairline)
                 AxisValueLabel(anchor: .leading) {
                     if let amount = value.as(Double.self) {
@@ -269,7 +292,7 @@ struct NetWorthView: View {
         let total = split.assets + split.liabilities
         let assetShare = total > 0 ? Double(split.assets) / Double(total) : 1
 
-        return Card {
+        return FlowSection {
             VStack(alignment: .leading, spacing: 14) {
                 CardHeader("Assets & liabilities")
 
@@ -301,7 +324,7 @@ struct NetWorthView: View {
     }
 
     private var currenciesCard: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 12) {
                 CardHeader("Other currencies", subtitle: "Totals are kept per currency. Exchange rates are not used.")
                 ForEach(totals.filter { $0.currency != currency }) { total in

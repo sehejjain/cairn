@@ -245,6 +245,37 @@ struct TransactionFetchTests {
         #expect(!posted.contains("A-pending"))
     }
 
+    @Test("Persisted rows with duplicate bank identifiers keep distinct list identities")
+    func duplicateBankIdentifiersHaveDistinctRowIDs() throws {
+        let container = try makeStore()
+        let context = container.mainContext
+        let account = Account(bankAccountID: "ACT-duplicate", name: "Checking")
+        context.insert(account)
+
+        for payee in ["First import", "Second import"] {
+            let transaction = LedgerTransaction(
+                bankTransactionID: "TRN-duplicate",
+                payeeDescription: payee,
+                amountMinorUnits: -100
+            )
+            transaction.account = account
+            transaction.accountIDIndex = account.bankAccountID
+            transaction.postedDate = Date(timeIntervalSince1970: 1_000)
+            context.insert(transaction)
+        }
+        try context.save()
+
+        let rows = try context.fetch(TransactionFetch.descriptor(filter: TransactionFilter()))
+            .map { $0.rowValue() }
+
+        #expect(rows.count == 2)
+        #expect(Set(rows.map(\.id)).count == 2)
+        #expect(Set(rows.map(\.payeeDescription)) == ["First import", "Second import"])
+        let reloaded = try ModelContext(container).fetch(TransactionFetch.descriptor(filter: TransactionFilter()))
+            .map { $0.rowValue() }
+        #expect(Set(rows.map(\.id)) == Set(reloaded.map(\.id)))
+    }
+
     @Test("Quick filters match the in-Swift semantics")
     func quickFilters() throws {
         let seeded = try seed()

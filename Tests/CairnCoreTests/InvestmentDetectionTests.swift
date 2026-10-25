@@ -113,6 +113,139 @@ struct InvestmentDetectionTests {
         #expect(holdings.first?.marketValueMinorUnits == 120_000)
     }
 
+    @Test("Duplicate position rows and incoming ids reconcile deterministically")
+    func duplicateHoldingsReconcile() async throws {
+        let (container, engine) = try makeEngine()
+        let context = container.mainContext
+        let owner = try makeOwner(in: context)
+        let initial = SimpleFINAccountSet(
+            connections: [SimpleFINConnection(id: "CON-A", name: "Broker", organizationID: "ORG-A")],
+            accounts: [
+                SimpleFINAccount(
+                    id: "1", name: "Brokerage", connectionID: "CON-A", currency: .usd,
+                    balanceMinorUnits: 0,
+                    holdings: [SimpleFINHolding(id: "SHARED", name: "Target", currency: .usd, marketValueMinorUnits: 100)]
+                ),
+                SimpleFINAccount(
+                    id: "2", name: "Other brokerage", connectionID: "CON-A", currency: .usd,
+                    balanceMinorUnits: 0,
+                    holdings: [SimpleFINHolding(id: "SHARED", name: "Other", currency: .usd, marketValueMinorUnits: 77)]
+                ),
+            ]
+        )
+        try await apply(initial, owner: owner, engine: engine)
+
+        let accounts = try context.fetch(FetchDescriptor<Account>())
+        let targetAccount = try #require(accounts.first { $0.bankAccountID == "1" })
+        let original = try #require(targetAccount.holdings?.first)
+
+        // Simulate legacy duplicate rows: a blank-currency stale row for the
+        // reported id, plus duplicate orphan rows.
+        let blankDuplicate = Holding(holdingID: "SHARED", name: "Stale", currency: Currency(code: ""))
+        let orphanA = Holding(holdingID: "REMOVED", name: "Orphan A")
+        let orphanB = Holding(holdingID: "REMOVED", name: "Orphan B")
+        for duplicate in [blankDuplicate, orphanA, orphanB] {
+            context.insert(duplicate)
+        }
+        blankDuplicate.account = targetAccount
+        orphanA.account = targetAccount
+        orphanB.account = targetAccount
+        targetAccount.holdings = [blankDuplicate, original, orphanA, orphanB]
+        try context.save()
+
+        let firstIncoming = SimpleFINHolding(
+            id: "SHARED", symbol: "JPY", name: "Authoritative", currency: Currency(code: "JPY", exponent: 0),
+            marketValueMinorUnits: 1_234, costBasisMinorUnits: 900
+        )
+        let repeatedIncoming = SimpleFINHolding(
+            id: "SHARED", symbol: "USD", name: "Duplicate feed row", currency: .usd,
+            marketValueMinorUnits: 9_999
+        )
+        let snapshot = SimpleFINAccountSet(
+            connections: [SimpleFINConnection(id: "CON-A", name: "Broker", organizationID: "ORG-A")],
+            accounts: [SimpleFINAccount(
+                id: "1", name: "Brokerage", connectionID: "CON-A", currency: .usd,
+                balanceMinorUnits: 0, holdings: [firstIncoming, repeatedIncoming]
+            )]
+        )
+        try await apply(snapshot, owner: owner, engine: engine)
+
+        let firstReload = ModelContext(container)
+        let firstAccounts = try firstReload.fetch(FetchDescriptor<Account>())
+        let reloadedTarget = try #require(firstAccounts.first { $0.bankAccountID == "1" })
+        let targetHoldings = try #require(reloadedTarget.holdings)
+        #expect(targetHoldings.count == 1)
+        let authoritative = try #require(targetHoldings.first)
+        #expect(authoritative.symbol == "JPY")
+        #expect(authoritative.name == "Authoritative")
+        #expect(authoritative.currency == Currency(code: "JPY", exponent: 0))
+        #expect(authoritative.marketValueMinorUnits == 1_234)
+        #expect(authoritative.costBasisMinorUnits == 900)
+        #expect(try firstReload.fetch(FetchDescriptor<Holding>()).count == 2)
+        let reloadedOther = try #require(firstAccounts.first { $0.bankAccountID == "2" })
+        #expect(reloadedOther.holdings?.count == 1)
+        #expect(reloadedOther.holdings?.first?.marketValueMinorUnits == 77)
+
+        try await apply(snapshot, owner: owner, engine: engine)
+        let secondReload = ModelContext(container)
+        let reloadedHoldings = try secondReload.fetch(FetchDescriptor<Holding>())
+        let secondAccounts = try secondReload.fetch(FetchDescriptor<Account>())
+        let targetAfterResync = try #require(secondAccounts.first { $0.bankAccountID == "1" }?.holdings)
+        #expect(reloadedHoldings.count == 2)
+        #expect(targetAfterResync.count == 1)
+        #expect(targetAfterResync.first?.marketValueMinorUnits == 1_234)
+        #expect(InvestmentPortfolioSummary.byCurrency(holdings: targetAfterResync).first?.positionValueMinorUnits == 1_234)
+    }
+
+    @Test("Re-sync repairs blank holding currencies in place and combines their currency group")
+    func blankHoldingCurrencyRepairsOnSync() async throws {
+        let (container, engine) = try makeEngine()
+        let owner = try makeOwner(in: container.mainContext)
+        let original = SimpleFINAccountSet(
+            connections: [SimpleFINConnection(id: "CON-A", name: "Broker", organizationID: "ORG-A")],
+            accounts: [SimpleFINAccount(
+                id: "1", name: "Brokerage", connectionID: "CON-A", currency: .usd,
+                balanceMinorUnits: 200_000,
+                holdings: [SimpleFINHolding(
+                    id: "H1", name: "First holding", currency: Currency(code: ""),
+                    marketValueMinorUnits: 100_000, costBasisMinorUnits: 50_000
+                )]
+            )]
+        )
+        try await apply(original, owner: owner, engine: engine)
+        let firstContext = ModelContext(container)
+        let originalHolding = try #require(try firstContext.fetch(FetchDescriptor<Holding>()).first)
+        let originalID = originalHolding.persistentModelID
+        #expect(originalHolding.currency.code.isEmpty)
+
+        let json = """
+        {
+          "connections": [{ "conn_id": "CON-A", "name": "Broker", "org_id": "ORG-A" }],
+          "accounts": [{ "id": "1", "name": "Brokerage", "conn_id": "CON-A",
+            "currency": "USD", "balance": "2000.00", "holdings": [
+              { "id": "H1", "description": "First holding", "currency": "  ",
+                "market_value": "1000.00", "cost_basis": "500.00" },
+              { "id": "H2", "currency": "USD", "market_value": "500.00" }
+            ]
+          }]
+        }
+        """
+        let response = try JSONDecoder().decode(SimpleFINAccountSetDTO.self, from: Data(json.utf8))
+        try await apply(response.toDomain(), owner: owner, engine: engine)
+
+        let reloaded = try ModelContext(container).fetch(FetchDescriptor<Holding>())
+        let repaired = try #require(reloaded.first { $0.holdingID == "H1" })
+        #expect(repaired.persistentModelID == originalID)
+        #expect(repaired.currency == .usd)
+        #expect(repaired.marketValueMinorUnits == 100_000)
+        #expect(repaired.costBasisMinorUnits == 50_000)
+        let groups = InvestmentPortfolioSummary.byCurrency(holdings: reloaded)
+        #expect(groups.count == 1)
+        #expect(groups.first?.currency == .usd)
+        #expect(groups.first?.positionCount == 2)
+        #expect(groups.first?.positionValueMinorUnits == 150_000)
+    }
+
     @Test("Accounts without positions fall back to name inference")
     func nameFallback() async throws {
         let (container, engine) = try makeEngine()

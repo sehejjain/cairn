@@ -6,6 +6,40 @@ All notable changes to Cairn are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- Simplify Activity filters to text tabs with a clear selection indicator.
+- Introduce the Flow design with Today, Activity, Plan, and Wealth destinations,
+  a warm background, cobalt accents, and open layouts with aligned financial rows.
+- Bring monthly spending and net-worth line charts to Today. Scrub a chart to
+  see the selected date and amount in its headline.
+- Show expense categories as an interactive donut alongside a readable breakdown,
+  with spending pace and monthly trend lines in Spending detail.
+- Organize budgets, upcoming payments, funds, and shared expenses in Plan;
+  bring account balances and investments together in Wealth.
+- Replace the Mac sidebar with a compact destination switcher and arrange
+  dashboard summaries in columns that adapt to the window width.
+- Make Plan easier to scan with a monthly limit summary, compact category rows,
+  and previews of upcoming payments and funds on iPhone and Mac.
+- Use the Mac Budget window for an adaptive category grid alongside monthly
+  totals, spending without limits, and sinking funds.
+- Adapt financial summaries and chart controls to larger text while retaining
+  native iOS navigation and Liquid Glass controls. Keep Settings in the toolbar.
+
+### Fixed
+
+- Use the account currency when investment positions report a blank currency.
+  Repair previously imported blanks without changing stored amounts when the
+  currency scale matches; other cases are corrected on their next bank sync.
+- Remove repeated investment positions during bank sync, including stale copies
+  that previously retained a blank currency.
+- Review and combine duplicate bank-account copies in Settings while preserving
+  history and edits. Conflicting records stay separate.
+- Enable navigation to detail screens from the Mac Settings window.
+- Keep distinct transaction records as separate rows when imported bank IDs collide.
+- Request App Group authorization when signing Mac builds so they can open
+  the existing shared data store.
+
 ## [1.5.1] - 2026-10-24
 
 ### Added

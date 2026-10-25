@@ -62,25 +62,25 @@ struct SinkingFundsView: View {
     @ViewBuilder
     private func summaryCard(_ currency: Currency) -> some View {
         if let totals = totals(currency) {
-            HeroCard {
+            VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
                     HStack {
-                        Text("Set aside").font(.subheadline.weight(.medium)).foregroundStyle(.white.opacity(0.75))
+                        Text("Set aside").font(.subheadline.weight(.medium)).foregroundStyle(.secondary)
                         Spacer()
-                        Text(currency.displayLabel).font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.65))
+                        Text(currency.displayLabel).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     }
                     AmountText(money: Money(minorUnits: totals.funded, currency: currency),
-                               font: .cairnHero, colorOverride: .white, deemphasizeFraction: true)
-                    Rectangle().fill(.white.opacity(0.12)).frame(height: 1)
+                               font: .cairnHero, deemphasizeFraction: true)
+                    Rectangle().fill(CairnTheme.hairline).frame(height: 1)
                     HStack {
-                        Text("Monthly plan").font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                        Text("Monthly plan").font(.subheadline).foregroundStyle(.secondary)
                         Spacer()
                         AmountText(money: Money(minorUnits: totals.monthly, currency: currency),
-                                   font: .headline, colorOverride: .white)
+                                   font: .headline)
                     }
                 }
             }
-        } else { Card { FootnoteText("Fund totals unavailable") } }
+        } else { FlowSection { FootnoteText("Fund totals unavailable") } }
     }
 
     private func totals(_ currency: Currency) -> (funded: Int64, monthly: Int64)? {
@@ -97,7 +97,7 @@ struct SinkingFundsView: View {
     }
 
     private func fundCard(_ fund: SinkingFund) -> some View {
-        Card(padding: 20) {
+        FlowSection {
             VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
                 HStack(spacing: CairnTheme.Spacing.m) {
                     TrackingSymbol(name: "tray.and.arrow.down")
@@ -197,11 +197,11 @@ struct SinkingFundDetail: View {
                     }
                     planCard(input, summary: summary)
                 } else {
-                    Card { FootnoteText("Fund totals unavailable. Review the allocation history.") }
+                    FlowSection { FootnoteText("Fund totals unavailable. Review the allocation history.") }
                 }
                 historySection(input)
                 if !input.note.isEmpty {
-                    Card {
+                    FlowSection {
                         VStack(alignment: .leading, spacing: CairnTheme.Spacing.m) {
                             CardHeader("Note")
                             Text(input.note).font(.subheadline).foregroundStyle(.secondary)
@@ -229,30 +229,30 @@ struct SinkingFundDetail: View {
     }
 
     private func hero(_ input: SinkingFundInput, summary: SinkingFundSummary) -> some View {
-        HeroCard {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
                         Text(input.name).font(.title3.weight(.semibold))
-                        Text(input.state.title).font(.caption).foregroundStyle(.white.opacity(0.7))
+                        Text(input.state.title).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Image(systemName: "tray.and.arrow.down").font(.title2).foregroundStyle(CairnTheme.inkGlow)
+                    Image(systemName: "tray.and.arrow.down").font(.title2).foregroundStyle(CairnTheme.accent)
                         .accessibilityHidden(true)
                 }
                 AmountText(money: Money(minorUnits: summary.fundedMinorUnits, currency: input.currency),
-                           font: .cairnHero, colorOverride: .white, deemphasizeFraction: true)
+                           font: .cairnHero, deemphasizeFraction: true)
                     .accessibilityIdentifier("fundedAmount")
                 Text("of \(Money(minorUnits: input.targetMinorUnits, currency: input.currency).formatted()) set aside")
-                    .font(.subheadline).foregroundStyle(.white.opacity(0.75))
-                ProgressView(value: min(1, summary.progress)).tint(CairnTheme.inkGlow)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                ProgressView(value: min(1, summary.progress)).tint(CairnTheme.accent)
                     .accessibilityLabel("Fund progress")
                     .accessibilityValue(summary.progress.formatted(.percent.precision(.fractionLength(0))))
                 HStack {
-                    Text("Remaining").foregroundStyle(.white.opacity(0.7))
+                    Text("Remaining").foregroundStyle(.secondary)
                     Spacer()
                     AmountText(money: Money(minorUnits: summary.remainingMinorUnits, currency: input.currency),
-                               font: .subheadline.weight(.semibold), colorOverride: .white)
+                               font: .subheadline.weight(.semibold))
                 }
                 .font(.subheadline)
             }
@@ -260,7 +260,7 @@ struct SinkingFundDetail: View {
     }
 
     private func planCard(_ input: SinkingFundInput, summary: SinkingFundSummary) -> some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
                 CardHeader("Contribution plan")
                 HStack(alignment: .top, spacing: CairnTheme.Spacing.l) {
@@ -285,7 +285,7 @@ struct SinkingFundDetail: View {
         VStack(alignment: .leading, spacing: CairnTheme.Spacing.s) {
             SectionLabel(title: "Allocation history")
             if entries.isEmpty {
-                Card { Text("No allocations recorded").font(.subheadline).foregroundStyle(.secondary) }
+                FlowSection { Text("No allocations recorded").font(.subheadline).foregroundStyle(.secondary) }
             } else {
                 RowGroup {
                     ForEach(entries) { entry in

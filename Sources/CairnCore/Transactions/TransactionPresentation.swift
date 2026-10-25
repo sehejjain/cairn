@@ -114,17 +114,21 @@ public struct TransactionRowValue: Sendable, Hashable, Identifiable {
         categoryName == nil && !countsAsTransfer && !isIgnored
     }
 
-    /// The composite identity used for list diffing. Both components are stored,
-    /// non-encrypted fields on the model, so the key is cheap and stable for the
-    /// life of the store.
+    /// The identity used for list diffing. Bank identifiers are not guaranteed
+    /// unique among persisted records (for example, duplicate imports can leave
+    /// two models with the same account and transaction IDs), so model identity
+    /// takes precedence whenever a persisted model is available. Raw values
+    /// without a model identity retain the caller-supplied bank composite.
     public static func stableID(
         accountIDIndex: String,
         bankTransactionID: String,
         persistentID: PersistentIdentifier?
     ) -> String {
-        if accountIDIndex.isEmpty && bankTransactionID.isEmpty {
-            guard let persistentID else { return "unidentified" }
+        if let persistentID {
             return String(describing: persistentID)
+        }
+        if accountIDIndex.isEmpty && bankTransactionID.isEmpty {
+            return "unidentified"
         }
         return "\(accountIDIndex)/\(bankTransactionID)"
     }

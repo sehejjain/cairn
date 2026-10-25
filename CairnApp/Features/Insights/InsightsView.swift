@@ -16,7 +16,7 @@ struct InsightsView: View {
 
     @State private var month: Date = Calendar.current.dateInterval(of: .month, for: .now)?.start ?? .now
     @State private var showAllCategories = false
-    @State private var categoryPage = 0
+    @ScaledMetric(relativeTo: .body) private var lineChartHeight = 190.0
     @State private var categorySelection: Double?
     @State private var paceSelection: Int?
     @State private var trendSelection: Date?
@@ -28,6 +28,7 @@ struct InsightsView: View {
     /// False until the first background fetch lands, so the empty state does not
     /// flash before the values arrive.
     @State private var hasLoadedInsights = false
+    @State private var insightLoadFailed = false
 
     var body: some View {
         let data = snapshot
@@ -46,43 +47,24 @@ struct InsightsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.top, 24)
                     monthlyBudgetLink
+                } else if insightLoadFailed {
+                    ContentUnavailableView("Spending unavailable", systemImage: "exclamationmark.arrow.triangle.2.circlepath")
+                    Button("Try again") { reloadToken &+= 1 }
                 } else if !hasInsightData {
                     insufficientData
                     monthlyBudgetLink
                 } else {
-                    heroCard(data).cairnAppear()
-                    monthlyBudgetLink
-
-                    ScreenSectionHeader(
-                        "Spending patterns",
-                        subtitle: "Pace, history, and where this month's money went."
-                    )
-                    DashboardGrid(minimumColumnWidth: 420) {
-                        paceCard(data).cairnAppear(delay: 0.05)
-                        trendCard(data).cairnAppear(delay: 0.1)
-                    }
-                    categoryCard(data).cairnAppear(delay: 0.1)
-
-                    ScreenSectionHeader(
-                        "Details",
-                        subtitle: "Merchants, recurring charges, and ways to organize activity."
-                    )
-                    DashboardGrid(minimumColumnWidth: 320) {
-                        merchantsCard(data).cairnAppear(delay: 0.15)
-                        recurringCard.cairnAppear(delay: 0.2)
-                        categorizeCard.cairnAppear(delay: 0.24)
-                        exploreCard.cairnAppear(delay: 0.28)
-                    }
+                    dashboard(data)
                 }
                 if !hasInsightData {
                     exploreCard
                 }
             }
-            .cairnScreen(maxWidth: CairnTheme.dashboardMaxWidth)
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnScrollEdge()
         .cairnCanvas()
-        .navigationTitle("Insights")
+        .navigationTitle("Spending")
         .task {
             await model.refreshCategorizationCounts()
             await model.refreshRecurring()
@@ -106,6 +88,50 @@ struct InsightsView: View {
 
     // MARK: - Currency & data
 
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
+
+    @ViewBuilder
+    private func dashboard(_ data: InsightsSnapshot) -> some View {
+        #if os(macOS)
+        FlowColumns(primaryFraction: 0.56, minimumColumnWidth: 380) {
+            VStack(alignment: .leading, spacing: 24) {
+                heroCard(data)
+                monthlyBudgetLink
+            }
+        } secondary: {
+            categoryCard(data)
+        }
+        FlowColumns(minimumColumnWidth: 380) {
+            trendCard(data)
+        } secondary: {
+            merchantsCard(data)
+        }
+        FlowColumns(minimumColumnWidth: 340) {
+            VStack(alignment: .leading, spacing: 24) {
+                recurringCard
+                categorizeCard
+            }
+        } secondary: {
+            exploreCard
+        }
+        #else
+        heroCard(data).cairnAppear()
+        monthlyBudgetLink
+        categoryCard(data)
+        trendCard(data)
+        merchantsCard(data)
+        recurringCard
+        categorizeCard
+        exploreCard
+        #endif
+    }
+
     /// Whether there is any transaction to analyze at all. With none, every
     /// card would read zero, so an explanation is clearer than empty charts.
     private var hasInsightData: Bool {
@@ -121,6 +147,8 @@ struct InsightsView: View {
     /// the detached task because constructing it on the main actor would bind
     /// its executor there.
     private func loadInsightRows() async {
+        if insightLoadFailed { hasLoadedInsights = false }
+        insightLoadFailed = false
         let container = model.container
         let scopes = currencyAccounts.map {
             InsightAccountScope(bankAccountID: $0.bankAccountID, displayName: $0.displayName)
@@ -129,9 +157,16 @@ struct InsightsView: View {
         let fetcher = await Task.detached(priority: .utility) {
             InsightsFetcher(modelContainer: container)
         }.value
-        let values = await fetcher.insightTransactions(scopes: scopes, earliest: earliest)
-        guard !Task.isCancelled else { return }
-        insightRows = values
+        do {
+            let values = try await fetcher.insightTransactions(scopes: scopes, earliest: earliest)
+            guard !Task.isCancelled else { return }
+            if values != insightRows { categorySelection = nil }
+            insightRows = values
+        } catch {
+            guard !Task.isCancelled else { return }
+            insightRows = []
+            insightLoadFailed = true
+        }
         hasLoadedInsights = true
     }
 
@@ -233,81 +268,81 @@ struct InsightsView: View {
     }
 
     private var monthPicker: some View {
-        HStack(spacing: 8) {
-            stepButton("chevron.left", label: "Previous month") { shiftMonth(-1) }
-
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    GlassEffectContainer(spacing: 6) {
-                        HStack(spacing: 6) {
-                            ForEach(recentMonths, id: \.self) { candidate in
-                                if isSelected(candidate) {
-                                    monthButton(candidate)
-                                        .buttonStyle(.glassProminent)
-                                        .tint(CairnTheme.ink)
-                                } else {
-                                    monthButton(candidate)
-                                        .buttonStyle(.glass(.regular))
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                    }
+        VStack(alignment: .leading, spacing: 4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    monthMenu.fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 8)
+                    monthStepControls
                 }
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.04),
-                            .init(color: .black, location: 0.96),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .onAppear { scrollToSelected(proxy, animated: false) }
-                .onChange(of: month) { _, _ in scrollToSelected(proxy, animated: true) }
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.size.width
-                } action: { _ in
-                    scrollToSelected(proxy, animated: false)
+                .fixedSize(horizontal: true, vertical: false)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    monthMenu
+                    HStack {
+                        Spacer(minLength: 0)
+                        monthStepControls
+                    }
                 }
             }
 
-            stepButton("chevron.right", label: "Next month") { shiftMonth(1) }
-                .disabled(isCurrentMonth)
-                .foregroundStyle(isCurrentMonth ? Color.secondary : Color.primary)
+            if isCurrentMonth {
+                Text("Month to date")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(.vertical, 2)
     }
 
-    private func monthButton(_ candidate: Date) -> some View {
-        Button {
-            withAnimation(reduceMotion ? nil : CairnTheme.Motion.quick) { month = candidate }
+    private var monthMenu: some View {
+        Menu {
+            Picker("Month", selection: $month) {
+                ForEach(recentMonths, id: \.self) { candidate in
+                    Text(candidate.formatted(.dateTime.month(.wide).year()))
+                        .tag(candidate)
+                }
+            }
         } label: {
-            Text(candidate.formatted(.dateTime.month(.abbreviated).year(.twoDigits)))
-                .font(.subheadline.weight(isSelected(candidate) ? .semibold : .medium))
-                .foregroundStyle(.primary)
-                .frame(minHeight: 32)
+            HStack(spacing: 6) {
+                Text(month.formatted(.dateTime.month(.wide).year()))
+                    .font(.headline)
+                    .contentTransition(.numericText())
+                    .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-        .id(candidate)
-        .accessibilityAddTraits(isSelected(candidate) ? .isSelected : [])
+        .accessibilityLabel("Select month")
+        .accessibilityValue(Text(month.formatted(.dateTime.month(.wide).year())))
+    }
+
+    private var monthStepControls: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                stepButton("chevron.left", label: "Previous month") { shiftMonth(-1) }
+                stepButton("chevron.right", label: "Next month", enabled: !isCurrentMonth) { shiftMonth(1) }
+            }
+        }
     }
 
     private func stepButton(
         _ symbol: String,
         label: LocalizedStringKey,
+        enabled: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(.primary)
-                .frame(width: 36, height: 36)
+                .font(.body.weight(.medium))
+                .foregroundStyle(enabled ? Color.primary : Color.secondary)
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(.glass(.regular))
+        .disabled(!enabled)
         .foregroundStyle(.primary)
         .accessibilityLabel(Text(label))
     }
@@ -318,41 +353,46 @@ struct InsightsView: View {
         withAnimation(reduceMotion ? nil : CairnTheme.Motion.quick) { month = next }
     }
 
-    private func scrollToSelected(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let selected = recentMonths.first(where: { isSelected($0) }) else { return }
-        if animated {
-            withAnimation(reduceMotion ? nil : CairnTheme.Motion.quick) { proxy.scrollTo(selected, anchor: .center) }
-        } else {
-            proxy.scrollTo(selected, anchor: .center)
-        }
-    }
-
     // MARK: - Hero
 
     private func heroCard(_ data: InsightsSnapshot) -> some View {
-        HeroCard {
+        let selected = selectedPacePoint(in: data)
+        return VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 14) {
-                Text(isCurrentMonth ? "Spent so far this month" : "Spent in \(data.monthStart.formatted(.dateTime.month(.wide)))")
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.75))
+                Group {
+                    if let selected,
+                       let date = Calendar.current.date(byAdding: .day, value: selected.day - 1, to: data.monthStart) {
+                        Text("Spent through \(date.formatted(date: .abbreviated, time: .omitted))")
+                    } else {
+                        Text(isCurrentMonth
+                             ? "Spent so far this month"
+                             : "Spent in \(data.monthStart.formatted(.dateTime.month(.wide)))")
+                    }
+                }
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
 
                 AmountText(
-                    money: Money(minorUnits: data.currentToDateSpending, currency: primaryCurrency),
+                    money: Money(minorUnits: selected?.amountMinorUnits ?? data.currentToDateSpending,
+                                 currency: primaryCurrency),
                     font: .cairnHero,
-                    colorOverride: .white,
-                    deemphasizeFraction: true
+                    deemphasizeFraction: true,
+                    animatesChanges: false
                 )
+                .accessibilityIdentifier("spendingDetailHeadlineAmount")
+
+                paceCard(data)
 
                 HStack(spacing: 8) {
                     if let change = data.spendingChangeVsDate {
-                        TrendPill(ratio: change, higherIsBad: true, onInk: true)
+                        TrendPill(ratio: change, higherIsBad: true)
                         Text("vs this point last month")
                             .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.secondary)
                     } else if isCurrentMonth {
                         Text("No comparison yet — last month had no spending.")
                             .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -360,37 +400,50 @@ struct InsightsView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "gauge.with.needle")
                             .font(.caption.weight(.semibold))
+                            .accessibilityHidden(true)
                         Text("On pace for \(moneyText(data.projectedSpending)) by month end")
-                            .font(.footnote.weight(.medium))
+                            .font(.footnote)
                     }
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.12), in: Capsule())
+                    .foregroundStyle(.secondary)
                 }
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.12))
+                    .fill(CairnTheme.hairline)
                     .frame(height: 1)
 
-                HStack(alignment: .top, spacing: 16) {
-                    heroMetric("Income", data.current.incomeMinorUnits)
-                    heroMetric(
-                        "Net",
-                        data.current.netMinorUnits,
-                        tint: data.current.netMinorUnits >= 0 ? CairnTheme.inkGlow : Color(red: 1, green: 0.62, blue: 0.58)
-                    )
-                    heroMetric("Avg / day", data.averageDailySpending())
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 20) {
+                        heroMetric("Income", data.current.incomeMinorUnits)
+                        heroMetric(
+                            "Net",
+                            data.current.netMinorUnits,
+                            tint: data.current.netMinorUnits >= 0 ? CairnTheme.positive : CairnTheme.negative
+                        )
+                        heroMetric("Avg / day", data.averageDailySpending())
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        heroMetric("Income", data.current.incomeMinorUnits)
+                        heroMetric(
+                            "Net",
+                            data.current.netMinorUnits,
+                            tint: data.current.netMinorUnits >= 0 ? CairnTheme.positive : CairnTheme.negative
+                        )
+                        heroMetric("Avg / day", data.averageDailySpending())
+                    }
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, CairnTheme.Spacing.s)
     }
 
-    private func heroMetric(_ title: String, _ minorUnits: Int64, tint: Color = .white) -> some View {
+    private func heroMetric(_ title: String, _ minorUnits: Int64, tint: Color = .primary) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.secondary)
             AmountText(
                 money: Money(minorUnits: minorUnits, currency: primaryCurrency),
                 font: .subheadline.weight(.semibold),
@@ -416,16 +469,9 @@ struct InsightsView: View {
     }
 
     private func paceCard(_ data: InsightsSnapshot) -> some View {
-        let selected = paceSelection.flatMap { day in data.cumulative.first { $0.day == day } }
-        return Card {
+        let selected = selectedPacePoint(in: data)
+        return VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                CardHeader(
-                    "Spending pace",
-                     subtitle: selected.map {
-                         LocalizedStringKey("Day \($0.day): \(moneyText($0.amountMinorUnits)) spent")
-                     } ?? paceSubtitle(data)
-                )
-
                 if data.cumulative.isEmpty {
                     Text("No spending recorded yet.")
                         .font(.callout)
@@ -433,19 +479,6 @@ struct InsightsView: View {
                 } else {
                     Chart {
                         ForEach(data.cumulative) { point in
-                            AreaMark(
-                                x: .value("Day", point.day),
-                                y: .value("Spent", dollars(point.amountMinorUnits)),
-                                series: .value("Series", "actual")
-                            )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [CairnTheme.accent.opacity(0.28), CairnTheme.accent.opacity(0.0)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .interpolationMethod(.monotone)
                             LineMark(
                                 x: .value("Day", point.day),
                                 y: .value("Spent", dollars(point.amountMinorUnits)),
@@ -453,7 +486,7 @@ struct InsightsView: View {
                             )
                             .foregroundStyle(CairnTheme.accent)
                             .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round))
-                            .interpolationMethod(.monotone)
+                            .interpolationMethod(.linear)
                         }
                         ForEach(projection(data)) { point in
                             LineMark(
@@ -494,7 +527,7 @@ struct InsightsView: View {
                         }
                     }
                     .chartXScale(domain: 1...data.daysInMonth)
-                    .chartXSelection(value: $paceSelection)
+                    .flowChartSelection($paceSelection)
                     .chartXAxis {
                         AxisMarks(values: [1, 8, 15, 22, data.daysInMonth]) { value in
                             AxisValueLabel(anchor: .top) {
@@ -503,7 +536,7 @@ struct InsightsView: View {
                         }
                     }
                     .chartYAxis {
-                        AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
+                        AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
                             AxisGridLine().foregroundStyle(CairnTheme.hairline)
                             AxisValueLabel(anchor: .leading) {
                                  if let amount = value.as(Double.self) {
@@ -512,12 +545,13 @@ struct InsightsView: View {
                             }
                         }
                     }
-                    .frame(height: 180)
+                    .frame(height: lineChartHeight)
                     .sensoryFeedback(.selection, trigger: paceSelection)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Text("Spending pace"))
+                    .accessibilityIdentifier("spendingPaceChart")
                     .accessibilityValue(
-                        Text(verbatim: data.cumulative.last.map { moneyText($0.amountMinorUnits) } ?? "")
+                        Text(verbatim: (selected ?? data.cumulative.last).map { moneyText($0.amountMinorUnits) } ?? "")
                     )
                     .accessibilityChartDescriptor(paceDescriptor(data))
                     .accessibilityAdjustableAction { direction in
@@ -531,13 +565,20 @@ struct InsightsView: View {
                         }
                     }
 
-                    HStack(spacing: 14) {
-                        legend("This month", color: CairnTheme.accent, dashed: false)
-                        if isCurrentMonth {
-                            legend("Projected", color: CairnTheme.accent.opacity(0.55), dashed: true)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 14) {
+                            legend("This month", color: CairnTheme.accent, dashed: false)
+                            if isCurrentMonth {
+                                legend("Projected", color: CairnTheme.accent.opacity(0.55), dashed: true)
+                            }
+                            if data.averageDailyPace > 0 {
+                                legend("Usual pace", color: .secondary, dashed: true)
+                            }
                         }
-                        if data.averageDailyPace > 0 {
-                            legend("Usual pace", color: .secondary, dashed: true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            legend("This month", color: CairnTheme.accent, dashed: false)
+                            if isCurrentMonth { legend("Projected", color: CairnTheme.accent.opacity(0.55), dashed: true) }
+                            if data.averageDailyPace > 0 { legend("Usual pace", color: .secondary, dashed: true) }
                         }
                     }
                 }
@@ -545,14 +586,9 @@ struct InsightsView: View {
         }
     }
 
-    private func paceSubtitle(_ data: InsightsSnapshot) -> LocalizedStringKey? {
-        guard isCurrentMonth, data.averageDailyPace > 0 else { return nil }
-        let usual = data.averageDailyPace * Int64(data.lastDayWithData)
-        let diff = data.currentToDateSpending - usual
-        if abs(diff) < max(100, usual / 50) { return "Right on your usual pace." }
-        return diff > 0
-            ? "\(moneyText(diff)) ahead of your usual pace."
-            : "\(moneyText(-diff)) under your usual pace."
+    private func selectedPacePoint(in data: InsightsSnapshot) -> PacePoint? {
+        guard let paceSelection else { return nil }
+        return data.cumulative.min { abs($0.day - paceSelection) < abs($1.day - paceSelection) }
     }
 
     private func legend(_ title: String, color: Color, dashed: Bool) -> some View {
@@ -583,41 +619,40 @@ struct InsightsView: View {
         let selected = trendSelection.flatMap { date in
             data.months.first { Calendar.current.isDate($0.monthStart, equalTo: date, toGranularity: .month) }
         }
-        return Card {
+        return FlowSection {
             VStack(alignment: .leading, spacing: 12) {
                 CardHeader(
                     "Six-month trend",
-                    subtitle: selected.map {
-                         LocalizedStringKey(
-                             "\($0.monthStart.formatted(.dateTime.month(.wide))): \(moneyText($0.spendingMinorUnits)) spent"
-                         )
-                    } ?? "Average \(moneyText(average)) per month"
+                    subtitle: selected.map { LocalizedStringKey($0.monthStart.formatted(.dateTime.month(.wide).year())) }
+                        ?? "Average per month"
                 )
+                AmountText(money: Money(minorUnits: selected?.spendingMinorUnits ?? average, currency: primaryCurrency),
+                           font: .cairnDisplay, animatesChanges: false)
 
-                Chart(data.months) { totals in
-                    BarMark(
-                        x: .value("Month", totals.monthStart, unit: .month),
-                        y: .value("Spending", dollars(totals.spendingMinorUnits)),
-                        width: .ratio(0.55)
-                    )
-                    .foregroundStyle(
-                        isSelected(totals.monthStart)
-                            ? AnyShapeStyle(CairnTheme.inkGradient)
-                            : AnyShapeStyle(CairnTheme.accent.opacity(0.28))
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                Chart {
+                    ForEach(data.months) { totals in
+                        LineMark(
+                            x: .value("Month", totals.monthStart),
+                            y: .value("Spending", dollars(totals.spendingMinorUnits))
+                        )
+                        .foregroundStyle(CairnTheme.accent)
+                        .lineStyle(StrokeStyle(lineWidth: 2.5))
+                        PointMark(x: .value("Month", totals.monthStart),
+                                  y: .value("Spending", dollars(totals.spendingMinorUnits)))
+                            .foregroundStyle(CairnTheme.accent)
+                    }
                     RuleMark(y: .value("Average", dollars(average)))
                         .foregroundStyle(Color.secondary.opacity(0.4))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
                     if let selected {
-                        RuleMark(x: .value("Selected", selected.monthStart, unit: .month))
+                        RuleMark(x: .value("Selected", selected.monthStart))
                             .foregroundStyle(Color.secondary.opacity(0.4))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     }
                 }
-                .chartXSelection(value: $trendSelection)
+                .chartYScale(domain: .automatic(includesZero: true))
+                .flowChartSelection($trendSelection)
                 .chartYAxis {
-                    AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
+                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
                         AxisGridLine().foregroundStyle(CairnTheme.hairline)
                         AxisValueLabel(anchor: .leading) {
                             if let amount = value.as(Double.self) { Text(shortCurrency(amount)).foregroundStyle(Color.secondary) }
@@ -630,7 +665,7 @@ struct InsightsView: View {
                             .foregroundStyle(Color.secondary)
                     }
                 }
-                .frame(height: 150)
+                .frame(height: lineChartHeight)
                 .sensoryFeedback(.selection, trigger: trendSelection)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text("Monthly spending"))
@@ -655,23 +690,13 @@ struct InsightsView: View {
     // MARK: - Categories
 
     private func categoryCard(_ data: InsightsSnapshot) -> some View {
-        return Card {
+        return FlowSection {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader("Spending by category")
 
                 if data.categories.contains(where: { $0.amountMinorUnits > 0 }) {
-                    Picker("Category view", selection: $categoryPage) {
-                        Text("Chart").tag(0)
-                        Text("List").tag(1)
-                    }
-                    .pickerStyle(.segmented)
-                    .accessibilityLabel("Category view")
-
-                    Group {
-                        if categoryPage == 0 { categoryChart(data) }
-                        else { categoryList(data) }
-                    }
-                    .animation(reduceMotion ? nil : CairnTheme.Motion.standard, value: categoryPage)
+                    categoryChart(data)
+                    categoryList(data)
                 } else {
                     Text("No spending recorded this month.")
                         .font(.callout)
@@ -682,7 +707,7 @@ struct InsightsView: View {
     }
 
     private func categoryChart(_ data: InsightsSnapshot) -> some View {
-        let categories = data.categories.filter { $0.amountMinorUnits > 0 }
+        let categories = chartCategories(data)
         let total = categories.reduce(Int64(0)) { MinorUnits.addClamped($0, $1.amountMinorUnits) }
         let selected = selectedCategory(in: categories)
         return VStack(spacing: 12) {
@@ -711,31 +736,36 @@ struct InsightsView: View {
                     }
             }
             .overlay {
-                VStack(spacing: 2) {
-                    if let selected {
-                        Text(selected.name)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                        Text(moneyText(selected.amountMinorUnits))
-                            .font(.headline)
-                            .minimumScaleFactor(0.7)
-                            .lineLimit(1)
-                    } else {
-                        Text("Spent")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(moneyText(total))
-                            .font(.headline)
-                            .minimumScaleFactor(0.7)
-                            .lineLimit(1)
+                GeometryReader { geometry in
+                    VStack(spacing: 2) {
+                        if let selected {
+                            Text(selected.name)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            Text(moneyText(selected.amountMinorUnits))
+                                .font(.headline)
+                                .minimumScaleFactor(0.7)
+                                .lineLimit(1)
+                        } else {
+                            Text("Spent")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(moneyText(total))
+                                .font(.headline)
+                                .minimumScaleFactor(0.7)
+                                .lineLimit(1)
+                        }
                     }
+                    .frame(width: min(geometry.size.width, geometry.size.height) * 0.54)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
                 }
-                .padding(30)
                 .allowsHitTesting(false)
+                .accessibilityHidden(true)
             }
-            .frame(height: 245)
+            .frame(height: lineChartHeight * 1.25)
             .accessibilityLabel("Category spending chart")
+            .accessibilityIdentifier("expenseBreakdownChart")
             .accessibilityValue(
                 Text(
                     selected.map {
@@ -769,7 +799,31 @@ struct InsightsView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func selectedCategory(in categories: [CategoryBreakdown]) -> CategoryBreakdown? {
+    /// Small categories remain available in the list, while the chart keeps
+    /// a readable number of slices. The aggregate uses the same positive values.
+    private struct CategorySlice: Identifiable {
+        let id: String
+        let name: String
+        let colorHex: String
+        let amountMinorUnits: Int64
+    }
+
+    private func chartCategories(_ data: InsightsSnapshot) -> [CategorySlice] {
+        let positive = data.categories.filter { $0.amountMinorUnits > 0 }
+        let visible = positive.count > 6 ? Array(positive.prefix(5)) : positive
+        let slices = visible.map {
+            CategorySlice(id: "category:\($0.id)", name: $0.name, colorHex: $0.colorHex, amountMinorUnits: $0.amountMinorUnits)
+        }
+        guard positive.count > 6 else { return slices }
+        let remainder = positive.dropFirst(5)
+        let combined = CategorySlice(
+            id: "aggregate", name: String(localized: "Other categories"), colorHex: "8992A3",
+            amountMinorUnits: remainder.reduce(0) { MinorUnits.addClamped($0, $1.amountMinorUnits) }
+        )
+        return slices + [combined]
+    }
+
+    private func selectedCategory(in categories: [CategorySlice]) -> CategorySlice? {
         guard let categorySelection else { return nil }
         var runningTotal = 0.0
         for category in categories {
@@ -782,8 +836,8 @@ struct InsightsView: View {
     }
 
     private func categorySelectionValue(
-        for category: CategoryBreakdown,
-        in categories: [CategoryBreakdown]
+        for category: CategorySlice,
+        in categories: [CategorySlice]
     ) -> Double {
         categories.prefix { $0.id != category.id }
             .reduce(0.0) { $0 + Double($1.amountMinorUnits) }
@@ -818,7 +872,7 @@ struct InsightsView: View {
     }
 
     private var exploreCard: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 12) {
                 CardHeader("Explore")
                 NavigationLink {
@@ -891,7 +945,7 @@ struct InsightsView: View {
     // MARK: - Merchants
 
     private func merchantsCard(_ data: InsightsSnapshot) -> some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 12) {
                 CardHeader("Top merchants")
 
@@ -906,11 +960,11 @@ struct InsightsView: View {
                                 Text("\(index + 1)")
                                     .font(.caption.weight(.bold))
                                     .monospacedDigit()
-                                    .foregroundStyle(index == 0 ? Color.white : .secondary)
+                                    .foregroundStyle(index == 0 ? CairnTheme.accent : .secondary)
                                     .frame(width: 24, height: 24)
                                      .background(
                                          index == 0
-                                             ? AnyShapeStyle(CairnTheme.inkGradient)
+                                             ? AnyShapeStyle(CairnTheme.accent.opacity(0.12))
                                              : AnyShapeStyle(CairnTheme.surfaceInset),
                                          in: Circle()
                                      )
@@ -949,7 +1003,7 @@ struct InsightsView: View {
     // MARK: - Categorization
 
     private var categorizeCard: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 12) {
                     SettingsIcon(systemImage: "sparkles", tint: Color(red: 0.62, green: 0.36, blue: 0.87))

@@ -272,9 +272,22 @@ extension SimpleFINAccountSetDTO {
         for raw: String?,
         customCurrencies: [String: Currency]
     ) -> Currency {
-        let value = raw ?? "USD"
-        if let resolved = customCurrencies[value] { return resolved }
+        guard let raw,
+              let value = normalizedCurrencyValue(raw) else {
+            return .usd
+        }
+        if let resolved = customCurrencies[value] ?? customCurrencies[raw] { return resolved }
         return Currency.simpleFIN(value)
+    }
+
+    /// Treat blank server currency values as absent during parsing.
+    /// Keep surrounding whitespace out of ISO codes and descriptor URL lookups.
+    private static func normalizedCurrencyValue(_ raw: String?) -> String? {
+        guard let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 
     /// - Parameter customCurrencies: Descriptors already fetched for any
@@ -312,10 +325,12 @@ extension SimpleFINAccountSetDTO {
             }
             let holdings = (dto.holdings ?? []).compactMap { holding -> SimpleFINHolding? in
                 guard let holdingID = holding.id, !holdingID.isEmpty else { return nil }
-                let holdingCurrency = Self.currency(
-                    for: holding.currency ?? dto.currency,
-                    customCurrencies: customCurrencies
-                )
+                let holdingCurrency: Currency
+                if Self.normalizedCurrencyValue(holding.currency) != nil {
+                    holdingCurrency = Self.currency(for: holding.currency, customCurrencies: customCurrencies)
+                } else {
+                    holdingCurrency = currency
+                }
                 let holdingExponent = holdingCurrency.exponent
                 let marketValue = MinorUnits.parse(holding.marketValue ?? "0", exponent: holdingExponent) ?? 0
                 let costBasis = holding.costBasis.flatMap { MinorUnits.parse($0, exponent: holdingExponent) }

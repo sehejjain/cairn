@@ -51,6 +51,11 @@ DEVELOPMENT_TEAM =
 
 CODE_SIGN_STYLE = Automatic
 
+// macOS must provision group.-prefixed App Groups as well as request them in
+// entitlements. This refreshes older profiles that omit the group authorization
+// and would otherwise deny access to the existing shared data container.
+REGISTER_APP_GROUPS[sdk=macosx*] = YES
+
 // Per-developer overrides, if the file exists. `#include?` (no warning when
 // missing) is the standard mechanism for keeping local signing out of git.
 #include? "Signing.local.xcconfig"

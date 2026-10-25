@@ -39,16 +39,6 @@ struct TransactionsView: View {
             case .uncategorized: "Needs category"
             }
         }
-        var systemImage: String? {
-            switch self {
-            case .all: nil
-            case .spending: "arrow.up.right"
-            case .income: "arrow.down.left"
-            case .pending: "clock"
-            case .uncategorized: "questionmark.circle"
-            }
-        }
-
         var query: TransactionFilter.Quick {
             switch self {
             case .all: .all
@@ -62,7 +52,7 @@ struct TransactionsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
+            VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
                 reviewInboxEntryPoint
                 filterBar
                 if let feed {
@@ -77,7 +67,7 @@ struct TransactionsView: View {
                     }
                 }
             }
-            .cairnScreen(maxWidth: 920)
+            .cairnScreen(maxWidth: activityWidth)
             .animation(CairnTheme.Motion.standard, value: feed?.rows.count ?? 0)
         }
         .cairnScrollEdge()
@@ -126,83 +116,103 @@ struct TransactionsView: View {
             ReviewInboxView()
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "tray.full.fill")
-                    .font(.title3.weight(.semibold))
+                Image(systemName: "tray.full")
+                    .font(.body.weight(.medium))
                     .foregroundStyle(CairnTheme.accent)
-                    .frame(width: 38, height: 38)
-                    .background(CairnTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .frame(width: 40, height: 40)
+                    .background(CairnTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Review Inbox")
-                        .font(.headline)
+                    Text("Review inbox")
+                        .font(.body.weight(.medium))
                     if count == 0 {
-                        Text("You're all caught up")
-                            .font(.subheadline)
+                        Text("All caught up")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("^[\(count) transaction](inflect: true) need attention")
-                            .font(.subheadline)
+                        Text("^[\(count) transaction](inflect: true) to review")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
+                if count > 0 {
+                    Text(count.formatted())
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(CairnTheme.accent)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(CairnTheme.accent.opacity(0.10), in: Capsule())
+                        .accessibilityHidden(true)
+                }
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(14)
-            .background(CairnTheme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CairnTheme.outline))
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .frame(minHeight: 52)
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Shows transactions that need your attention")
+        .accessibilityIdentifier("reviewInboxEntry")
+        .accessibilityHint(count == 0 ? "Review recently added transactions" : "Review \(count) transactions that need attention")
+    }
+
+    private var activityWidth: CGFloat {
+        #if os(macOS)
+        1_280
+        #else
+        920
+        #endif
     }
 
     // MARK: - Filters
 
     private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: 12) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 16) {
                     ForEach(QuickFilter.allCases) { quick in
-                        if filter.quick == quick.query {
-                            quickFilterButton(quick)
-                                .buttonStyle(.glassProminent)
-                                .tint(CairnTheme.ink)
-                        } else {
-                            quickFilterButton(quick)
-                                .buttonStyle(.glass(.regular))
-                                .foregroundStyle(.primary)
-                        }
-                    }
-                    if let categoryFilter {
-                        activeFilterChip(
-                            categoryFilter.name,
-                            systemImage: categoryFilter.symbolName,
-                            tint: CairnTheme.color(hex: categoryFilter.colorHex)
-                        ) {
-                            filter.categoryID = nil
-                        }
-                    }
-                    if let accountFilter {
-                        activeFilterChip(accountFilter.displayName, systemImage: "building.columns", tint: CairnTheme.accent) {
-                            filter.accountID = nil
-                        }
-                    }
-                    if let tagFilter {
-                        activeFilterChip(
-                            tagFilter.name,
-                            systemImage: "tag.fill",
-                            tint: CairnTheme.color(hex: tagFilter.colorHex)
-                        ) {
-                            filter.tagID = nil
-                        }
+                        quickFilterButton(quick)
                     }
                 }
-                .padding(.horizontal, 2)
-                .padding(.vertical, 4)
+            }
+            .background(alignment: .bottom) {
+                Rectangle().fill(CairnTheme.hairline).frame(height: 1)
+                    .allowsHitTesting(false)
+            }
+            if categoryFilter != nil || accountFilter != nil || tagFilter != nil {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        if let categoryFilter {
+                            activeFilterChip(
+                                categoryFilter.name,
+                                systemImage: categoryFilter.symbolName,
+                                tint: CairnTheme.color(hex: categoryFilter.colorHex)
+                            ) {
+                                filter.categoryID = nil
+                            }
+                        }
+                        if let accountFilter {
+                            activeFilterChip(
+                                accountFilter.displayName, systemImage: "building.columns", tint: CairnTheme.accent
+                            ) {
+                                filter.accountID = nil
+                            }
+                        }
+                        if let tagFilter {
+                            activeFilterChip(
+                                tagFilter.name,
+                                systemImage: "tag.fill",
+                                tint: CairnTheme.color(hex: tagFilter.colorHex)
+                            ) {
+                                filter.tagID = nil
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
-        .scrollClipDisabled()
         .sensoryFeedback(.selection, trigger: filter.quick)
     }
 
@@ -210,18 +220,20 @@ struct TransactionsView: View {
         Button {
             withAnimation(CairnTheme.Motion.quick) { filter.quick = quick.query }
         } label: {
-            HStack(spacing: 5) {
-                if let systemImage = quick.systemImage {
-                    Image(systemName: systemImage)
-                        .font(.caption.weight(.semibold))
-                        .accessibilityHidden(true)
+            Text(quick.title)
+                .font(.subheadline.weight(filter.quick == quick.query ? .semibold : .regular))
+                .foregroundStyle(filter.quick == quick.query ? CairnTheme.accent : .secondary)
+                .padding(.horizontal, 4)
+                .frame(minWidth: 44, minHeight: 44)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(filter.quick == quick.query ? CairnTheme.accent : .clear)
+                        .frame(height: 2)
                 }
-                Text(quick.title)
-                    .font(.subheadline.weight(filter.quick == quick.query ? .semibold : .medium))
-            }
-            .foregroundStyle(.primary)
-            .frame(minHeight: 32)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("activityFilter.\(quick.rawValue)")
         .accessibilityAddTraits(filter.quick == quick.query ? .isSelected : [])
     }
 
@@ -233,7 +245,7 @@ struct TransactionsView: View {
                 Image(systemName: "xmark").font(.caption2.weight(.bold)).opacity(0.7)
             }
             .foregroundStyle(tint)
-            .frame(minHeight: 32)
+            .frame(minHeight: 44)
         }
         .buttonStyle(.glass(.regular))
         .tint(tint)

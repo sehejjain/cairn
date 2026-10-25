@@ -146,7 +146,7 @@ struct InvestmentTransactionClassificationTests {
         #expect(try fetch("RETAIL", in: context).effectiveCategory?.name == "Shopping")
 
         let insights = InsightsFetcher(modelContainer: container)
-        let inputs = await insights.insightTransactions(
+        let inputs = try await insights.insightTransactions(
             scopes: [InsightAccountScope(bankAccountID: "BROKER", displayName: "Sample Investment Account")],
             earliest: start
         )

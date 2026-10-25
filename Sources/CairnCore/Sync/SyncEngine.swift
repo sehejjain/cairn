@@ -921,6 +921,114 @@ public actor SyncEngine {
 
     // MARK: - Repairing duplicate connections
 
+    /// Repairs the missing-currency import without changing the scale of any
+    /// stored amount. A different exponent still needs a fresh bank snapshot.
+    @discardableResult
+    public func repairBlankHoldingCurrencies() throws -> Int {
+        let holdings = try modelContext.fetch(FetchDescriptor<Holding>())
+        var repaired = 0
+        for holding in holdings {
+            guard holding.currencyCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !holding.isCustomCurrency,
+                  let account = holding.account,
+                  account.sourceRaw == AccountSource.simpleFIN.rawValue,
+                  !account.currencyCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  account.currencyExponent == holding.currencyExponent else { continue }
+            holding.apply(currency: account.currency)
+            repaired += 1
+        }
+        if repaired > 0 { try modelContext.save() }
+        return repaired
+    }
+
+    public enum AccountConsolidationError: Error, LocalizedError {
+        case accountsChanged
+        case conflictingData
+        case updatesInProgress
+
+        public var errorDescription: String? {
+            switch self {
+            case .accountsChanged:
+                "These account copies have changed. Reopen Duplicate accounts and try again."
+            case .conflictingData:
+                "These copies contain conflicting currencies, transactions, or edits. They were kept separate."
+            case .updatesInProgress:
+                "Account updates are still running. Try again in a moment."
+            }
+        }
+    }
+
+    /// Combines explicitly reviewed copies of one bank account. This is a
+    /// one-device user action, not a background survivor election: legacy
+    /// Account rows have no immutable identity shared across devices.
+    @discardableResult
+    public func consolidateDuplicateAccounts(
+        keeping survivorID: PersistentIdentifier,
+        duplicates duplicateIDs: [PersistentIdentifier]
+    ) throws -> Int {
+        let ids = Set(duplicateIDs)
+        guard !ids.isEmpty, !ids.contains(survivorID),
+              let survivor = liveModel(Account.self, survivorID),
+              survivor.sourceRaw == AccountSource.simpleFIN.rawValue,
+              !survivor.bankAccountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let institutionID = survivor.institution?.persistentModelID else {
+            throw AccountConsolidationError.accountsChanged
+        }
+        let duplicates = ids.compactMap { liveModel(Account.self, $0) }
+        guard duplicates.count == ids.count,
+              duplicates.allSatisfy({
+                  $0.sourceRaw == AccountSource.simpleFIN.rawValue && $0.bankAccountID == survivor.bankAccountID
+                      && $0.institution?.persistentModelID == institutionID
+              }) else { throw AccountConsolidationError.accountsChanged }
+
+        // Preflight every pair before writing: three copies may contain two
+        // conflicting edits even when the selected copy has no edit of its own.
+        let accounts = [survivor] + duplicates
+        for (index, account) in accounts.enumerated() {
+            for other in accounts.dropFirst(index + 1) {
+                guard account.currency == other.currency,
+                      canMerge(account, into: other), canMerge(other, into: account) else {
+                    throw AccountConsolidationError.conflictingData
+                }
+            }
+        }
+        guard Self.canConsolidateTransactions(accounts) else {
+            throw AccountConsolidationError.conflictingData
+        }
+
+        try modelContext.transaction {
+            for duplicate in duplicates {
+                mergeAccount(duplicate, into: survivor)
+                modelContext.delete(duplicate)
+            }
+        }
+        return duplicates.count
+    }
+
+    /// A reused bank transaction id can name distinct ledger entries. Do not
+    /// collapse those entries while consolidating their account copies.
+    private static func canConsolidateTransactions(_ accounts: [Account]) -> Bool {
+        var rows: [RowKey: [LedgerTransaction]] = [:]
+        for account in accounts {
+            for row in account.transactions ?? [] where !row.isDeleted {
+                rows[RowKey(row), default: []].append(row)
+            }
+        }
+        for group in rows.values {
+            for (index, row) in group.enumerated() {
+                for existing in group.dropFirst(index + 1) {
+                    guard existing.amountMinorUnits == row.amountMinorUnits,
+                          existing.currencyExponent == row.currencyExponent,
+                          existing.postedDate == row.postedDate,
+                          existing.payeeDescription == row.payeeDescription,
+                          existing.isPending == row.isPending,
+                          transactionEditsAgree(existing, row) else { return false }
+                }
+            }
+        }
+        return true
+    }
+
     /// One credential the repair merged away, with pre-merge fetch diagnostics.
     /// Fetch times never authorize replacing or deleting a distinct secret.
     public struct CredentialRetirement: Sendable, Equatable {
@@ -1252,6 +1360,7 @@ public actor SyncEngine {
     /// the merge unsafe.
     private func canMerge(_ duplicate: Account, into survivor: Account) -> Bool {
         if duplicate.sourceRaw != survivor.sourceRaw { return false }
+        if duplicate.currency != survivor.currency { return false }
 
         if let incoming = duplicate.customDisplayName, !incoming.isEmpty,
            let existing = survivor.customDisplayName, !existing.isEmpty,
@@ -1274,34 +1383,34 @@ public actor SyncEngine {
         )
         for transaction in duplicate.transactions ?? [] where !transaction.isDeleted {
             guard let existing = survivorTransactions[RowKey(transaction)] else { continue }
-            if let incoming = transaction.note, let current = existing.note, incoming != current {
-                return false
-            }
-            if let incoming = transaction.userCategory?.uuid,
-               let current = existing.userCategory?.uuid, incoming != current {
-                return false
-            }
-            if let incoming = transaction.settlementID,
-               let current = existing.settlementID,
-               incoming != current {
-                return false
-            }
-            let settlementChanged = transaction.settlementRole != existing.settlementRole
-                || transaction.settlementStatus != existing.settlementStatus
-                || transaction.settlementCounterparty != existing.settlementCounterparty
-                || transaction.settlementExpectedAmountMinorUnits != existing.settlementExpectedAmountMinorUnits
-                || transaction.settlementLinkedAmountMinorUnits != existing.settlementLinkedAmountMinorUnits
-            if transaction.isSettlementLinked, existing.isSettlementLinked, settlementChanged {
-                return false
-            }
+            if !Self.transactionEditsAgree(transaction, existing) { return false }
         }
         return true
+    }
+
+    private static func transactionEditsAgree(_ transaction: LedgerTransaction, _ existing: LedgerTransaction) -> Bool {
+        if transaction.isTransferUserSet, existing.isTransferUserSet,
+           transaction.isTransfer != existing.isTransfer { return false }
+        if let incoming = transaction.note, let current = existing.note, incoming != current { return false }
+        if let incoming = transaction.userCategory?.uuid,
+           let current = existing.userCategory?.uuid, incoming != current { return false }
+        if let incoming = transaction.settlementID,
+           let current = existing.settlementID, incoming != current { return false }
+        let settlementChanged = transaction.settlementRole != existing.settlementRole
+            || transaction.settlementStatus != existing.settlementStatus
+            || transaction.settlementCounterparty != existing.settlementCounterparty
+            || transaction.settlementExpectedAmountMinorUnits != existing.settlementExpectedAmountMinorUnits
+            || transaction.settlementLinkedAmountMinorUnits != existing.settlementLinkedAmountMinorUnits
+        return !(transaction.isSettlementLinked && existing.isSettlementLinked && settlementChanged)
     }
 
     /// Merges a duplicate account into the survivor: user-owned settings are
     /// combined, same-bank transactions are de-duplicated by their persisted
     /// keys with the user's edits preserved, and derived rows follow.
     private func mergeAccount(_ duplicate: Account, into survivor: Account) {
+        let incomingIsFresher = duplicate.lastSyncedAt.map { incoming in
+            survivor.lastSyncedAt.map { incoming > $0 } ?? true
+        } ?? false
         if (survivor.customDisplayName ?? "").isEmpty,
            let name = duplicate.customDisplayName, !name.isEmpty {
             survivor.customDisplayName = name
@@ -1315,16 +1424,16 @@ public actor SyncEngine {
             survivor.accountTypeRaw = duplicate.accountTypeRaw
         }
         // Keep the fresher bank-owned balance.
-        if let incoming = duplicate.lastSyncedAt,
-           survivor.lastSyncedAt.map({ incoming > $0 }) ?? true {
+        if incomingIsFresher {
+            survivor.apply(currency: duplicate.currency)
             survivor.balanceMinorUnits = duplicate.balanceMinorUnits
             survivor.availableBalanceMinorUnits = duplicate.availableBalanceMinorUnits
             survivor.hasAvailableBalance = duplicate.hasAvailableBalance
             survivor.balanceDate = duplicate.balanceDate
-            survivor.lastSyncedAt = incoming
+            survivor.lastSyncedAt = duplicate.lastSyncedAt
         }
 
-        let survivorTransactions = Dictionary(
+        var survivorTransactions = Dictionary(
             (survivor.transactions ?? []).filter { !$0.isDeleted }.map { (RowKey($0), $0) },
             uniquingKeysWith: { first, _ in first }
         )
@@ -1334,26 +1443,41 @@ public actor SyncEngine {
                 modelContext.delete(transaction)
             } else {
                 transaction.account = survivor
+                survivorTransactions[RowKey(transaction)] = transaction
             }
         }
 
         for holding in duplicate.holdings ?? [] where !holding.isDeleted {
-            if (survivor.holdings ?? []).contains(where: {
+            if let existing = (survivor.holdings ?? []).first(where: {
                 !$0.isDeleted && $0.holdingID == holding.holdingID
             }) {
-                // Derived data: the next sync refreshes the survivor's row.
-                modelContext.delete(holding)
+                if incomingIsFresher {
+                    modelContext.delete(existing)
+                    holding.account = survivor
+                } else {
+                    modelContext.delete(holding)
+                }
             } else {
                 holding.account = survivor
             }
         }
 
-        let survivorDays = Set((survivor.snapshots ?? []).filter { !$0.isDeleted }.map(\.day))
+        var survivorDays = Dictionary(
+            (survivor.snapshots ?? []).filter { !$0.isDeleted }.map { ($0.day, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
         for snapshot in duplicate.snapshots ?? [] where !snapshot.isDeleted {
-            if survivorDays.contains(snapshot.day) {
-                modelContext.delete(snapshot)
+            if let existing = survivorDays[snapshot.day] {
+                if incomingIsFresher {
+                    modelContext.delete(existing)
+                    snapshot.account = survivor
+                    survivorDays[snapshot.day] = snapshot
+                } else {
+                    modelContext.delete(snapshot)
+                }
             } else {
                 snapshot.account = survivor
+                survivorDays[snapshot.day] = snapshot
             }
         }
     }
@@ -1362,8 +1486,12 @@ public actor SyncEngine {
     private func mergeUserFields(from source: LedgerTransaction, into target: LedgerTransaction) {
         if target.note == nil { target.note = source.note }
         if target.userCategory == nil { target.userCategory = source.userCategory }
-        target.isTransfer = target.isTransfer || source.isTransfer
-        target.isTransferUserSet = target.isTransferUserSet || source.isTransferUserSet
+        if source.isTransferUserSet {
+            if !target.isTransferUserSet { target.isTransfer = source.isTransfer }
+            target.isTransferUserSet = true
+        } else if !target.isTransferUserSet {
+            target.isTransfer = target.isTransfer || source.isTransfer
+        }
         target.isIgnored = target.isIgnored || source.isIgnored
         if let reviewed = source.reviewedAt,
            target.reviewedAt.map({ reviewed > $0 }) ?? true {
@@ -1371,8 +1499,8 @@ public actor SyncEngine {
         }
         if let tags = source.tags, !tags.isEmpty {
             var merged = target.tags ?? []
-            let names = Set(merged.map(\.name))
-            for tag in tags where !names.contains(tag.name) {
+            var ids = Set(merged.map(\.persistentModelID))
+            for tag in tags where ids.insert(tag.persistentModelID).inserted {
                 merged.append(tag)
             }
             target.tags = merged
@@ -1597,14 +1725,23 @@ public actor SyncEngine {
 
     /// Replaces an account's positions with the ones just received. Positions
     /// are matched by their stable id so a sync updates rather than duplicates
-    /// them; positions the bank no longer reports are removed.
+    /// them; positions the bank no longer reports are removed. The first
+    /// existing row and first incoming occurrence win when an id is duplicated.
     private func applyHoldings(_ incoming: [SimpleFINHolding], to account: Account) {
-        var existing = Dictionary(
-            (account.holdings ?? []).map { ($0.holdingID, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
+        var existing: [String: Holding] = [:]
+        for holding in account.holdings ?? [] {
+            if existing[holding.holdingID] == nil {
+                existing[holding.holdingID] = holding
+            } else {
+                // Keep every physical row accounted for so duplicates cannot
+                // survive reconciliation just because their ID is the same.
+                modelContext.delete(holding)
+            }
+        }
 
-        for (index, simple) in incoming.enumerated() {
+        var seenIncomingIDs = Set<String>()
+        var displayOrder = 0
+        for simple in incoming where seenIncomingIDs.insert(simple.id).inserted {
             let holding: Holding
             if let match = existing.removeValue(forKey: simple.id) {
                 holding = match
@@ -1623,7 +1760,8 @@ public actor SyncEngine {
             holding.hasCostBasis = simple.costBasisMinorUnits != nil
             holding.purchasePriceMinorUnits = simple.purchasePriceMinorUnits ?? 0
             holding.hasPurchasePrice = simple.purchasePriceMinorUnits != nil
-            holding.displayOrder = index
+            holding.displayOrder = displayOrder
+            displayOrder += 1
         }
 
         for orphan in existing.values {

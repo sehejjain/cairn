@@ -532,7 +532,7 @@ struct InsightsFetcherTests {
 
         let earliest = now.addingTimeInterval(-30 * 86_400)
         let fetcher = await Task.detached { InsightsFetcher(modelContainer: container) }.value
-        let rows = await fetcher.insightTransactions(
+        let rows = try await fetcher.insightTransactions(
             scopes: [InsightAccountScope(bankAccountID: "A1", displayName: "Checking")],
             earliest: earliest
         )

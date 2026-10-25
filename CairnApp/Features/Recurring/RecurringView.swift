@@ -129,50 +129,49 @@ struct RecurringView: View {
     // MARK: - Hero
 
     private var hero: some View {
-        HeroCard {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Recurring commitments")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(.secondary)
 
                 AmountText(
                     money: Money(minorUnits: monthlyOutgoing, currency: primaryCurrency),
                     font: .cairnHero,
-                    colorOverride: .white,
                     deemphasizeFraction: true
                 )
 
                 HStack(spacing: 8) {
                     Text("^[\(outgoing.count) subscription](inflect: true) & bills")
                         .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.secondary)
                     if let next = nextCharge {
                         Text("·")
-                            .foregroundStyle(.white.opacity(0.4))
+                            .foregroundStyle(.secondary)
                         Text("Next \(next.nextExpectedDate.formatted(.dateTime.month(.abbreviated).day()))")
                             .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.secondary)
                     }
                 }
 
                 if !incoming.isEmpty {
                     Rectangle()
-                        .fill(Color.white.opacity(0.12))
+                        .fill(CairnTheme.hairline)
                         .frame(height: 1)
                     HStack(alignment: .top, spacing: 16) {
                         heroMetric("Monthly out", monthlyOutgoing)
-                        heroMetric("Monthly in", monthlyIncoming, tint: CairnTheme.inkGlow)
+                        heroMetric("Monthly in", monthlyIncoming, tint: CairnTheme.accent)
                     }
                 }
             }
         }
     }
 
-    private func heroMetric(_ title: String, _ minorUnits: Int64, tint: Color = .white) -> some View {
+    private func heroMetric(_ title: String, _ minorUnits: Int64, tint: Color = .primary) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.secondary)
             AmountText(
                 money: Money(minorUnits: minorUnits, currency: primaryCurrency),
                 font: .subheadline.weight(.semibold),
@@ -329,7 +328,7 @@ struct RecurringSummaryCard: View {
     }
 
     var body: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 10) {
                     SettingsIcon(systemImage: "repeat", tint: Color(red: 0.62, green: 0.36, blue: 0.87))
@@ -459,7 +458,7 @@ struct RecurringDetailView: View {
     }
 
     private var header: some View {
-        Card(padding: 20) {
+        FlowSection {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top, spacing: 14) {
                     CategoryBadge(
@@ -505,7 +504,7 @@ struct RecurringDetailView: View {
     }
 
     private var summary: some View {
-        Card {
+        FlowSection {
             VStack(alignment: .leading, spacing: 10) {
                 CardHeader("Details")
                 detailRow("Direction", series.direction == .outgoing ? "Money out" : "Money in")

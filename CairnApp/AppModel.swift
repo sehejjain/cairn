@@ -303,6 +303,7 @@ final class AppModel {
             try? await engine.seedDefaultCategoriesIfNeeded()
             SampleData.populate(context: container.mainContext)
             onboardingComplete = true
+            credentialsScanReady = true
             // The sample connection has no credential and no server, so running
             // the network path would only report it as unable to sync. Present
             // the synthetic ledger as a healthy, recently synced account.
@@ -422,8 +423,9 @@ final class AppModel {
         defer { isRepairingConnections = false }
 
         do {
+            let repairedCurrencies = try await engine.repairBlankHoldingCurrencies()
             let outcome = try await engine.repairDuplicateConnections()
-            guard outcome.didChange || !outcome.retiredCredentials.isEmpty else { return }
+            guard repairedCurrencies > 0 || outcome.didChange || !outcome.retiredCredentials.isEmpty else { return }
 
             let results = CredentialReKey.reKey(
                 retirements: outcome.retiredCredentials,
@@ -751,6 +753,20 @@ final class AppModel {
     #endif
 
     // MARK: - Sync
+
+    func consolidateDuplicateAccounts(
+        keeping survivorID: PersistentIdentifier,
+        duplicates duplicateIDs: [PersistentIdentifier]
+    ) async throws -> Int {
+        guard syncState != .syncing, !isRepairingConnections, credentialsScanReady else {
+            throw SyncEngine.AccountConsolidationError.updatesInProgress
+        }
+        isRepairingConnections = true
+        defer { isRepairingConnections = false }
+        let count = try await engine.consolidateDuplicateAccounts(keeping: survivorID, duplicates: duplicateIDs)
+        await refreshBudget()
+        return count
+    }
 
     @discardableResult
     func syncAll(force: Bool) async -> SyncState {

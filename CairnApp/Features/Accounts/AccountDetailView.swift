@@ -12,7 +12,7 @@ struct AccountDetailView: View {
     @Query private var chartTransactions: [LedgerTransaction]
     @State private var feed: TransactionsFeed?
     @State private var searchText = ""
-    @State private var historySelection: Int?
+    @State private var historySelection: Date?
     @State private var historyRange: NetWorthView.RangeOption = .ninetyDays
 
     /// The account's total row count, from `fetchCount`, so the hero never has
@@ -53,45 +53,18 @@ struct AccountDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
-                summary
-                    .cairnAppear()
-                if !holdings.isEmpty {
-                    holdingsCard
-                        .cairnAppear(delay: 0.03)
+                #if os(macOS)
+                FlowColumns(primaryFraction: 0.36, minimumColumnWidth: 320) {
+                    accountOverview
+                } secondary: {
+                    accountActivity
                 }
-                // The feed is created on first task; until then there is no
-                // count to branch on, so nothing is shown rather than flashing
-                // the empty state.
-                if let feed {
-                    if transactionCount > 1 {
-                        historyCard
-                            .cairnAppear(delay: 0.05)
-                    }
-                    if transactionCount == 0 {
-                        emptyTransactions
-                    } else if !feed.rows.isEmpty {
-                        TransactionDayList(
-                            sections: feed.sections,
-                            showsAccount: false,
-                            onReachEnd: { feed.loadMore() },
-                            onEdit: account.isManual ? { row in
-                                if let model = model(for: row) { editingTransaction = model }
-                            } : nil,
-                            onDelete: account.isManual ? { row in
-                                if let model = model(for: row) { transactionToDelete = model }
-                            } : nil
-                        )
-                        .cairnAppear(delay: 0.1)
-                    } else if !searchText.isEmpty {
-                        EmptyStateView(
-                            systemImage: "magnifyingglass",
-                            title: "Nothing matches",
-                            message: "Try a different search."
-                        )
-                    }
-                }
+                #else
+                accountOverview
+                accountActivity
+                #endif
             }
-            .cairnScreen()
+            .cairnScreen(maxWidth: pageMaxWidth)
         }
         .cairnCanvas()
         .navigationTitle(account.displayName)
@@ -180,6 +153,50 @@ struct AccountDetailView: View {
         }
     }
 
+    private var pageMaxWidth: CGFloat {
+        #if os(macOS)
+        CairnTheme.desktopMaxWidth
+        #else
+        CairnTheme.screenMaxWidth
+        #endif
+    }
+
+    private var accountOverview: some View {
+        VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
+            summary.cairnAppear()
+            if !holdings.isEmpty { holdingsCard.cairnAppear(delay: 0.03) }
+        }
+    }
+
+    @ViewBuilder
+    private var accountActivity: some View {
+        // Wait for the bounded feed before choosing its empty state.
+        if let feed {
+            VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
+                if transactionCount > 1 { historyCard.cairnAppear(delay: 0.05) }
+                if transactionCount == 0 {
+                    emptyTransactions
+                } else if !feed.rows.isEmpty {
+                    TransactionDayList(
+                        sections: feed.sections,
+                        showsAccount: false,
+                        onReachEnd: { feed.loadMore() },
+                        onEdit: account.isManual ? { row in
+                            if let model = model(for: row) { editingTransaction = model }
+                        } : nil,
+                        onDelete: account.isManual ? { row in
+                            if let model = model(for: row) { transactionToDelete = model }
+                        } : nil
+                    )
+                    .cairnAppear(delay: 0.1)
+                } else if !searchText.isEmpty {
+                    EmptyStateView(systemImage: "magnifyingglass", title: "Nothing matches",
+                                   message: "Try a different search.")
+                }
+            }
+        }
+    }
+
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
@@ -238,67 +255,74 @@ struct AccountDetailView: View {
     // MARK: - Summary
 
     private var summary: some View {
-        HeroCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 12) {
-                    AccountGlyph(account: account, size: 40, onInk: true)
-                    VStack(alignment: .leading, spacing: 2) {
+        FlowSection {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 12) {
+                    AccountGlyph(account: account, size: 40)
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(account.institution?.name.nonEmpty ?? sourceLabel)
                             .font(.subheadline.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(subtitle)
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.65))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Spacer()
+                    Spacer(minLength: 4)
                     if !account.includeInNetWorth {
-                        StatusPill(text: "Excluded", systemImage: "eye.slash", tint: .white.opacity(0.8))
+                        StatusPill(text: "Excluded", systemImage: "eye.slash")
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(account.accountType.isLiability ? "Balance owed" : "Current balance")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.65))
+                        .foregroundStyle(.secondary)
                     AmountText(
                         money: displayBalance,
                         font: .cairnHero,
-                        colorOverride: .white,
                         deemphasizeFraction: true
                     )
                 }
 
-                HStack(spacing: 20) {
-                    if account.hasAvailableBalance, account.availableBalance.minorUnits != account.balanceMinorUnits {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(account.accountType.isLiability ? "Available credit" : "Available")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
-                            AmountText(
-                                money: account.availableBalance,
-                                font: .subheadline.weight(.semibold),
-                                colorOverride: .white
-                            )
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 24) {
+                        accountDetails
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Transactions")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.6))
-                        Text("\(transactionCount)")
-                            .font(.subheadline.weight(.semibold))
-                            .monospacedDigit()
-                    }
-                    Spacer()
-                    if let date = account.balanceDate {
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text("As of")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.6))
-                            Text(date, format: .dateTime.month(.abbreviated).day().hour().minute())
-                                .font(.caption.weight(.medium))
-                        }
+                    VStack(alignment: .leading, spacing: 12) {
+                        accountDetails
                     }
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var accountDetails: some View {
+        if account.hasAvailableBalance, account.availableBalance.minorUnits != account.balanceMinorUnits {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.accountType.isLiability ? "Available credit" : "Available")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                AmountText(money: account.availableBalance, font: .subheadline.weight(.semibold))
+            }
+        }
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Transactions")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("\(transactionCount)")
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+        }
+        if let date = account.balanceDate {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("As of")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(date, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.caption.weight(.medium))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -338,9 +362,9 @@ struct AccountDetailView: View {
     }
 
     private var holdingsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(title: "Positions", trailing: "\(holdings.count)")
-            RowGroup {
+        FlowSection {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(title: "Positions", trailing: "\(holdings.count)")
                 ForEach(holdings) { holding in
                     HoldingEntry(holding: holding, isLast: holding.persistentModelID == holdings.last?.persistentModelID)
                 }
@@ -350,53 +374,48 @@ struct AccountDetailView: View {
 
     private var historyCard: some View {
         let series = NetWorthMath.series(account: account, transactions: chartTransactions, days: historyRange.days)
-        let change = NetWorthMath.change(in: series)
-        let selected = historySelection.flatMap { series.indices.contains($0) ? series[$0] : nil }
-        return Card {
+        let points = series.map { FlowChartPoint(date: $0.date, minorUnits: $0.balanceMinorUnits) }
+        let selected = FlowChartPoint.nearest(to: historySelection, in: points) ?? points.last
+        return FlowSection {
             VStack(alignment: .leading, spacing: 12) {
-                CardHeader(historyRange.longTitle) {
+                Text(historyRange.longTitle)
+                    .font(.headline)
+                VStack(alignment: .leading, spacing: 3) {
                     if let selected {
                         AmountText(
-                            money: Money(minorUnits: selected.balanceMinorUnits, currency: account.currency),
-                            font: .callout.weight(.semibold)
+                            money: Money(minorUnits: selected.minorUnits, currency: account.currency),
+                            font: .cairnDisplay,
+                            deemphasizeFraction: true,
+                            animatesChanges: false
                         )
-                    } else if let ratio = change.ratio {
-                        TrendPill(ratio: ratio, higherIsBad: account.accountType.isLiability)
+                        Group {
+                            if historySelection != nil {
+                                Text("Balance on \(selected.date.formatted(date: .abbreviated, time: .omitted))")
+                            } else {
+                                Text("Current balance")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .contentTransition(.opacity)
                     }
                 }
                 HStack {
-                    Spacer()
+                    Spacer(minLength: 0)
                     SegmentedPicker(options: NetWorthView.RangeOption.allCases, selection: $historyRange) {
                         LocalizedStringKey($0.title)
                     }
                     .frame(maxWidth: 220)
                 }
-                Sparkline(
-                    values: series.map { NetWorthMath.doubleValue($0.balanceMinorUnits, currency: account.currency) },
-                    tint: AccountGlyphStyle.forAccount(account).tint,
+                FlowLineChart(
+                    points: points,
+                    currency: account.currency,
+                    title: historyRange.longTitle,
                     selection: $historySelection
                 )
-                .frame(height: 72)
-                .onChange(of: series.count) { _, _ in historySelection = nil }
-                .sensoryFeedback(.selection, trigger: historySelection)
-                Text(
-                    selected.map { "Balance on \($0.date.formatted(date: .abbreviated, time: .omitted))" }
-                        ?? changeSentence(change.delta, since: series.first?.date)
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .contentTransition(.opacity)
             }
         }
-        .animation(CairnTheme.Motion.quick, value: historySelection)
         .animation(CairnTheme.Motion.quick, value: historyRange)
-    }
-
-    private func changeSentence(_ delta: Int64, since startDate: Date?) -> String {
-        if delta == 0 { return "Balance unchanged over the period." }
-        let money = Money(minorUnits: abs(delta), currency: account.currency)
-        let since = startDate?.formatted(date: .abbreviated, time: .omitted) ?? "the start of this period"
-        return "\(delta > 0 ? "Up" : "Down") \(money.formatted()) since \(since)."
     }
 
     private var emptyTransactions: some View {
