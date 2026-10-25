@@ -8,6 +8,45 @@ final class PersonalTrackingUITests: XCTestCase {
     }
 
     @MainActor
+    func testRedesignedOverviewNavigationAndTabs() {
+        let app = launchSampleApp()
+        defer { app.terminate() }
+
+        let netWorth = app.buttons["netWorthDetails"]
+        XCTAssertTrue(netWorth.waitForExistence(timeout: 10))
+        capture("Home financial overview", app: app)
+        netWorth.tap()
+        XCTAssertTrue(app.navigationBars["Net Worth"].waitForExistence(timeout: 5))
+        capture("Net worth history", app: app)
+        app.navigationBars.buttons.firstMatch.tap()
+
+        app.tabBars.buttons["Insights"].tap()
+        let monthPicker = app.buttons["Select month"]
+        XCTAssertTrue(monthPicker.waitForExistence(timeout: 5))
+        let currentMonth = monthPicker.value as? String
+        XCTAssertNotNil(currentMonth)
+        XCTAssertFalse(app.buttons["Next month"].isEnabled)
+        capture("Insights spending overview", app: app)
+        app.buttons["Previous month"].tap()
+        XCTAssertNotEqual(monthPicker.value as? String, currentMonth)
+        app.buttons["Next month"].tap()
+        XCTAssertEqual(monthPicker.value as? String, currentMonth)
+        XCTAssertFalse(app.buttons["Next month"].isEnabled)
+
+        app.tabBars.buttons["Investments"].tap()
+        XCTAssertTrue(app.navigationBars["Investments"].waitForExistence(timeout: 5))
+        capture("Investments overview", app: app)
+
+        app.tabBars.buttons["Activity"].tap()
+        let reviewInbox = app.buttons["reviewInboxEntry"]
+        XCTAssertTrue(reviewInbox.waitForExistence(timeout: 5))
+        capture("Activity transactions", app: app)
+        reviewInbox.tap()
+        XCTAssertTrue(app.navigationBars["Review Inbox"].waitForExistence(timeout: 5))
+        capture("Activity review inbox", app: app)
+    }
+
+    @MainActor
     func testStandaloneSharedExpenseAndPartialRepayment() {
         let app = launchSampleApp()
         defer { app.terminate() }

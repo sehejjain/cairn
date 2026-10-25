@@ -238,70 +238,76 @@ struct PersonalTrackingEntryPoints: View {
     @Query private var payments: [SharedExpensePayment]
     @Query private var funds: [SinkingFund]
     @Query private var entries: [SinkingFundEntry]
-    @State private var availableWidth: CGFloat = 0
-
-    private var layout: AnyLayout {
-        let spacing = CairnTheme.Spacing.l
-        if availableWidth >= 680 + spacing {
-            return AnyLayout(HStackLayout(alignment: .top, spacing: spacing))
-        }
-        return AnyLayout(VStackLayout(alignment: .leading, spacing: spacing))
-    }
-
     var body: some View {
-        // Both navigation actions stay in the accessibility tree while Home scrolls.
-        layout {
-            NavigationLink { SharedExpensesView() } label: {
-                Card {
-                    HStack(spacing: CairnTheme.Spacing.m) {
-                        TrackingSymbol(name: "person.2")
-                        VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
-                            Text("Shared expenses").font(.headline)
-                            if sharedCurrencies.isEmpty {
-                                Text("Keep track of who owes what").font(.caption).foregroundStyle(.secondary)
-                            }
-                            ForEach(sharedCurrencies, id: \.self) { currency in
-                                Text(sharedSummary(currency)).font(.caption).foregroundStyle(.secondary)
-                            }
+        RowGroup {
+            VStack(spacing: 0) {
+                NavigationLink { SharedExpensesView() } label: {
+                    entryRow("Shared expenses", symbol: "person.2") {
+                        if sharedCurrencies.isEmpty {
+                            Text("Keep track of who owes what")
                         }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        ForEach(sharedCurrencies, id: \.self) { currency in
+                            Text(sharedSummary(currency))
+                        }
                     }
                 }
-            }
-            .buttonStyle(.pressableCard)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Shared expenses")
-            .accessibilityValue(sharedCurrencies.map { sharedSummary($0) }.joined(separator: "; "))
-            .accessibilityAddTraits(.isButton)
-            .accessibilityIdentifier("sharedExpensesEntry")
-            NavigationLink { SinkingFundsView() } label: {
-                Card {
-                    HStack(spacing: CairnTheme.Spacing.m) {
-                        TrackingSymbol(name: "tray.and.arrow.down")
-                        VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
-                            Text("Sinking funds").font(.headline)
-                            if fundCurrencies.isEmpty {
-                                Text("Set money aside for what's ahead").font(.caption).foregroundStyle(.secondary)
-                            }
-                            ForEach(fundCurrencies, id: \.self) { currency in
-                                Text(fundSummary(currency)).font(.caption).foregroundStyle(.secondary)
-                            }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Shared expenses")
+                .accessibilityValue(sharedCurrencies.map { sharedSummary($0) }.joined(separator: "; "))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("sharedExpensesEntry")
+
+                RowDivider()
+
+                NavigationLink { SinkingFundsView() } label: {
+                    entryRow("Sinking funds", symbol: "tray.and.arrow.down") {
+                        if fundCurrencies.isEmpty {
+                            Text("Set money aside for what's ahead")
                         }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
+                        ForEach(fundCurrencies, id: \.self) { currency in
+                            Text(fundSummary(currency))
+                        }
                     }
                 }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Sinking funds")
+                .accessibilityValue(fundCurrencies.map { fundSummary($0) }.joined(separator: "; "))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("sinkingFundsEntry")
             }
-            .buttonStyle(.pressableCard)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Sinking funds")
-            .accessibilityValue(fundCurrencies.map { fundSummary($0) }.joined(separator: "; "))
-            .accessibilityAddTraits(.isButton)
-            .accessibilityIdentifier("sinkingFundsEntry")
         }
         .accessibilityElement(children: .contain)
-        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { availableWidth = $0 }
+    }
+
+    private func entryRow<Summary: View>(
+        _ title: LocalizedStringKey,
+        symbol: String,
+        @ViewBuilder summary: () -> Summary
+    ) -> some View {
+        HStack(spacing: CairnTheme.Spacing.m) {
+            Image(systemName: symbol)
+                .font(.title3)
+                .foregroundStyle(CairnTheme.accent)
+                .frame(width: 32)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
+                Text(title).font(.headline)
+                summary()
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+        .padding(CairnTheme.Spacing.l)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var sharedCurrencies: [Currency] {

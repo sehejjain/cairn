@@ -62,7 +62,7 @@ struct TransactionsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
+            VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
                 reviewInboxEntryPoint
                 filterBar
                 if let feed {
@@ -126,35 +126,45 @@ struct TransactionsView: View {
             ReviewInboxView()
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "tray.full.fill")
-                    .font(.title3.weight(.semibold))
+                Image(systemName: "tray.full")
+                    .font(.body.weight(.medium))
                     .foregroundStyle(CairnTheme.accent)
-                    .frame(width: 38, height: 38)
-                    .background(CairnTheme.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                    .frame(width: 40, height: 40)
+                    .background(CairnTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Review Inbox")
-                        .font(.headline)
+                    Text("Review inbox")
+                        .font(.body.weight(.medium))
                     if count == 0 {
-                        Text("You're all caught up")
-                            .font(.subheadline)
+                        Text("All caught up")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("^[\(count) transaction](inflect: true) need attention")
-                            .font(.subheadline)
+                        Text("^[\(count) transaction](inflect: true) to review")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
+                if count > 0 {
+                    Text(count.formatted())
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(CairnTheme.accent)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(CairnTheme.accent.opacity(0.10), in: Capsule())
+                        .accessibilityHidden(true)
+                }
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.tertiary)
             }
-            .padding(14)
-            .background(CairnTheme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(CairnTheme.outline))
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .frame(minHeight: 52)
         }
         .buttonStyle(.plain)
-        .accessibilityHint("Shows transactions that need your attention")
+        .accessibilityIdentifier("reviewInboxEntry")
+        .accessibilityHint(count == 0 ? "Review recently added transactions" : "Review \(count) transactions that need attention")
     }
 
     // MARK: - Filters
@@ -220,7 +230,7 @@ struct TransactionsView: View {
                     .font(.subheadline.weight(filter.quick == quick.query ? .semibold : .medium))
             }
             .foregroundStyle(.primary)
-            .frame(minHeight: 32)
+            .frame(minHeight: 44)
         }
         .accessibilityAddTraits(filter.quick == quick.query ? .isSelected : [])
     }
@@ -233,7 +243,7 @@ struct TransactionsView: View {
                 Image(systemName: "xmark").font(.caption2.weight(.bold)).opacity(0.7)
             }
             .foregroundStyle(tint)
-            .frame(minHeight: 32)
+            .frame(minHeight: 44)
         }
         .buttonStyle(.glass(.regular))
         .tint(tint)

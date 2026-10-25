@@ -6,6 +6,15 @@ All notable changes to Cairn are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- Refresh Home, Activity, Insights, and Investments with clearer financial
+  summaries, quieter surfaces, and more readable account and transaction rows.
+- Bring accounts directly below net worth on Home and group planning tools
+  together. Simplify month selection in Insights.
+- Adapt summary controls and financial rows to larger text sizes while retaining
+  native iOS navigation and Liquid Glass controls.
+
 ## [1.5.1] - 2026-10-24
 
 ### Added

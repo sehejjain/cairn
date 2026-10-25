@@ -233,67 +233,67 @@ struct InsightsView: View {
     }
 
     private var monthPicker: some View {
-        HStack(spacing: 8) {
-            stepButton("chevron.left", label: "Previous month") { shiftMonth(-1) }
-
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    GlassEffectContainer(spacing: 6) {
-                        HStack(spacing: 6) {
-                            ForEach(recentMonths, id: \.self) { candidate in
-                                if isSelected(candidate) {
-                                    monthButton(candidate)
-                                        .buttonStyle(.glassProminent)
-                                        .tint(CairnTheme.ink)
-                                } else {
-                                    monthButton(candidate)
-                                        .buttonStyle(.glass(.regular))
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                    }
+        VStack(alignment: .leading, spacing: 4) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    monthMenu.fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 8)
+                    monthStepControls
                 }
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.04),
-                            .init(color: .black, location: 0.96),
-                            .init(color: .clear, location: 1),
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .onAppear { scrollToSelected(proxy, animated: false) }
-                .onChange(of: month) { _, _ in scrollToSelected(proxy, animated: true) }
-                .onGeometryChange(for: CGFloat.self) { geometry in
-                    geometry.size.width
-                } action: { _ in
-                    scrollToSelected(proxy, animated: false)
+                .fixedSize(horizontal: true, vertical: false)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    monthMenu
+                    HStack {
+                        Spacer(minLength: 0)
+                        monthStepControls
+                    }
                 }
             }
 
-            stepButton("chevron.right", label: "Next month") { shiftMonth(1) }
-                .disabled(isCurrentMonth)
-                .foregroundStyle(isCurrentMonth ? Color.secondary : Color.primary)
+            if isCurrentMonth {
+                Text("Month to date")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .padding(.vertical, 2)
     }
 
-    private func monthButton(_ candidate: Date) -> some View {
-        Button {
-            withAnimation(reduceMotion ? nil : CairnTheme.Motion.quick) { month = candidate }
+    private var monthMenu: some View {
+        Menu {
+            Picker("Month", selection: $month) {
+                ForEach(recentMonths, id: \.self) { candidate in
+                    Text(candidate.formatted(.dateTime.month(.wide).year()))
+                        .tag(candidate)
+                }
+            }
         } label: {
-            Text(candidate.formatted(.dateTime.month(.abbreviated).year(.twoDigits)))
-                .font(.subheadline.weight(isSelected(candidate) ? .semibold : .medium))
-                .foregroundStyle(.primary)
-                .frame(minHeight: 32)
+            HStack(spacing: 6) {
+                Text(month.formatted(.dateTime.month(.wide).year()))
+                    .font(.headline)
+                    .contentTransition(.numericText())
+                    .fixedSize(horizontal: false, vertical: true)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
-        .id(candidate)
-        .accessibilityAddTraits(isSelected(candidate) ? .isSelected : [])
+        .accessibilityLabel("Select month")
+        .accessibilityValue(Text(month.formatted(.dateTime.month(.wide).year())))
+    }
+
+    private var monthStepControls: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                stepButton("chevron.left", label: "Previous month") { shiftMonth(-1) }
+                stepButton("chevron.right", label: "Next month") { shiftMonth(1) }
+                    .disabled(isCurrentMonth)
+                    .opacity(isCurrentMonth ? 0.35 : 1)
+            }
+        }
     }
 
     private func stepButton(
@@ -303,9 +303,9 @@ struct InsightsView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.footnote.weight(.bold))
+                .font(.body.weight(.medium))
                 .foregroundStyle(.primary)
-                .frame(width: 36, height: 36)
+                .frame(width: 44, height: 44)
         }
         .buttonStyle(.glass(.regular))
         .foregroundStyle(.primary)
@@ -318,41 +318,31 @@ struct InsightsView: View {
         withAnimation(reduceMotion ? nil : CairnTheme.Motion.quick) { month = next }
     }
 
-    private func scrollToSelected(_ proxy: ScrollViewProxy, animated: Bool) {
-        guard let selected = recentMonths.first(where: { isSelected($0) }) else { return }
-        if animated {
-            withAnimation(reduceMotion ? nil : CairnTheme.Motion.quick) { proxy.scrollTo(selected, anchor: .center) }
-        } else {
-            proxy.scrollTo(selected, anchor: .center)
-        }
-    }
-
     // MARK: - Hero
 
     private func heroCard(_ data: InsightsSnapshot) -> some View {
-        HeroCard {
+        VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 14) {
                 Text(isCurrentMonth ? "Spent so far this month" : "Spent in \(data.monthStart.formatted(.dateTime.month(.wide)))")
                     .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .foregroundStyle(.secondary)
 
                 AmountText(
                     money: Money(minorUnits: data.currentToDateSpending, currency: primaryCurrency),
                     font: .cairnHero,
-                    colorOverride: .white,
                     deemphasizeFraction: true
                 )
 
                 HStack(spacing: 8) {
                     if let change = data.spendingChangeVsDate {
-                        TrendPill(ratio: change, higherIsBad: true, onInk: true)
+                        TrendPill(ratio: change, higherIsBad: true)
                         Text("vs this point last month")
                             .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.secondary)
                     } else if isCurrentMonth {
                         Text("No comparison yet — last month had no spending.")
                             .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
+                            .foregroundStyle(.secondary)
                     }
                 }
 
@@ -360,37 +350,50 @@ struct InsightsView: View {
                     HStack(spacing: 6) {
                         Image(systemName: "gauge.with.needle")
                             .font(.caption.weight(.semibold))
+                            .accessibilityHidden(true)
                         Text("On pace for \(moneyText(data.projectedSpending)) by month end")
-                            .font(.footnote.weight(.medium))
+                            .font(.footnote)
                     }
-                    .foregroundStyle(.white.opacity(0.9))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.white.opacity(0.12), in: Capsule())
+                    .foregroundStyle(.secondary)
                 }
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.12))
+                    .fill(CairnTheme.hairline)
                     .frame(height: 1)
 
-                HStack(alignment: .top, spacing: 16) {
-                    heroMetric("Income", data.current.incomeMinorUnits)
-                    heroMetric(
-                        "Net",
-                        data.current.netMinorUnits,
-                        tint: data.current.netMinorUnits >= 0 ? CairnTheme.inkGlow : Color(red: 1, green: 0.62, blue: 0.58)
-                    )
-                    heroMetric("Avg / day", data.averageDailySpending())
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 20) {
+                        heroMetric("Income", data.current.incomeMinorUnits)
+                        heroMetric(
+                            "Net",
+                            data.current.netMinorUnits,
+                            tint: data.current.netMinorUnits >= 0 ? CairnTheme.positive : CairnTheme.negative
+                        )
+                        heroMetric("Avg / day", data.averageDailySpending())
+                    }
+                    .fixedSize(horizontal: true, vertical: false)
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        heroMetric("Income", data.current.incomeMinorUnits)
+                        heroMetric(
+                            "Net",
+                            data.current.netMinorUnits,
+                            tint: data.current.netMinorUnits >= 0 ? CairnTheme.positive : CairnTheme.negative
+                        )
+                        heroMetric("Avg / day", data.averageDailySpending())
+                    }
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, CairnTheme.Spacing.s)
     }
 
-    private func heroMetric(_ title: String, _ minorUnits: Int64, tint: Color = .white) -> some View {
+    private func heroMetric(_ title: String, _ minorUnits: Int64, tint: Color = .primary) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(.secondary)
             AmountText(
                 money: Money(minorUnits: minorUnits, currency: primaryCurrency),
                 font: .subheadline.weight(.semibold),
@@ -602,7 +605,7 @@ struct InsightsView: View {
                     )
                     .foregroundStyle(
                         isSelected(totals.monthStart)
-                            ? AnyShapeStyle(CairnTheme.inkGradient)
+                            ? AnyShapeStyle(CairnTheme.accent.gradient)
                             : AnyShapeStyle(CairnTheme.accent.opacity(0.28))
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -906,11 +909,11 @@ struct InsightsView: View {
                                 Text("\(index + 1)")
                                     .font(.caption.weight(.bold))
                                     .monospacedDigit()
-                                    .foregroundStyle(index == 0 ? Color.white : .secondary)
+                                    .foregroundStyle(index == 0 ? CairnTheme.accent : .secondary)
                                     .frame(width: 24, height: 24)
                                      .background(
                                          index == 0
-                                             ? AnyShapeStyle(CairnTheme.inkGradient)
+                                             ? AnyShapeStyle(CairnTheme.accent.opacity(0.12))
                                              : AnyShapeStyle(CairnTheme.surfaceInset),
                                          in: Circle()
                                      )

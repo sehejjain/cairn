@@ -8,9 +8,8 @@ import CairnCore
 /// and shared components. Screens reach for these tokens instead of ad-hoc
 /// values so the app feels like one considered object on iPhone, iPad, and Mac.
 ///
-/// The visual language is "private ledger": deep ink hero surfaces for the one
-/// number that matters, quiet off-white cards for everything else, tabular
-/// figures throughout, and motion that is quick but never showy.
+/// Financial figures lead, grouped surfaces organize supporting detail, and
+/// native controls provide the navigation layer. Color communicates meaning.
 enum CairnTheme {
     // MARK: Brand & semantic color
 
@@ -73,7 +72,7 @@ enum CairnTheme {
 
     // MARK: Geometry
 
-    static let cardRadius: CGFloat = 22
+    static let cardRadius: CGFloat = 20
     static let tileRadius: CGFloat = 14
     static let controlRadius: CGFloat = 12
     /// Comfortable line length for forms and detail screens.
@@ -122,8 +121,8 @@ enum CairnTheme {
 // MARK: - Typography
 
 extension Font {
-    /// The large hero figure. Tight and confident.
-    static let cairnHero = Font.system(.largeTitle, design: .default, weight: .semibold)
+    /// A larger financial figure that continues to follow Dynamic Type.
+    static let cairnHero = Font.system(.largeTitle, weight: .medium).scaled(by: 1.25)
     /// A secondary figure inside a hero or summary.
     static let cairnDisplay = Font.system(.title, design: .default, weight: .semibold)
     /// Section labels above cards.
@@ -201,9 +200,8 @@ extension Money {
 
 // MARK: - Surfaces
 
-/// A rounded card surface. Light mode uses a soft, wide shadow; dark mode uses
-/// an elevated surface with a hairline so the card still separates from the
-/// page without a muddy shadow.
+/// Supporting content uses an opaque, adaptive surface. Glass is reserved for
+/// controls, and grouping does not depend on decorative shadows.
 struct Card<Content: View>: View {
     var padding: CGFloat = CairnTheme.Spacing.l
     var cornerRadius: CGFloat = CairnTheme.cardRadius
@@ -227,31 +225,12 @@ struct HeroCard<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .foregroundStyle(.white)
-            .background {
-                ZStack {
-                    CairnTheme.inkGradient
-                    // A soft glow in the corner gives the surface depth without
-                    // competing with the figure.
-                    RadialGradient(
-                        colors: [CairnTheme.inkGlow.opacity(0.35), .clear],
-                        center: .topTrailing,
-                        startRadius: 0,
-                        endRadius: 320
-                    )
-                    RadialGradient(
-                        colors: [Color.white.opacity(0.06), .clear],
-                        center: .bottomLeading,
-                        startRadius: 0,
-                        endRadius: 260
-                    )
-                }
-            }
+            .background(CairnTheme.ink)
             .clipShape(RoundedRectangle(cornerRadius: CairnTheme.cardRadius, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: CairnTheme.cardRadius, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
             )
-            .shadow(color: CairnTheme.ink.opacity(0.28), radius: 22, y: 10)
     }
 }
 
@@ -270,14 +249,13 @@ private struct CardSurfaceModifier: ViewModifier {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
             .background(CairnTheme.surface, in: shape)
-            .overlay(shape.strokeBorder(scheme == .dark ? Color.white.opacity(0.07) : Color.black.opacity(0.04), lineWidth: 1))
-            .shadow(color: .black.opacity(scheme == .dark ? 0 : 0.035), radius: 8, y: 3)
+            .overlay(shape.strokeBorder(scheme == .dark ? Color.white.opacity(0.06) : .clear, lineWidth: 1))
     }
 }
 
 // MARK: - Section labels
 
-/// A quiet uppercase label that sits above a card or list group.
+/// A compact sentence-case heading for a content group.
 struct SectionLabel: View {
     let title: LocalizedStringKey
     var trailing: String?
@@ -285,10 +263,9 @@ struct SectionLabel: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .textCase(.uppercase)
-                .font(.cairnLabel)
-                .tracking(0.8)
+                .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
+                .accessibilityAddTraits(.isHeader)
             Spacer(minLength: CairnTheme.Spacing.s)
             if let trailing {
                 Text(trailing)
@@ -584,7 +561,7 @@ struct StatTile<Value: View>: View {
             HStack(spacing: 5) {
                 if let systemImage {
                     Image(systemName: systemImage)
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(tint)
                         .accessibilityHidden(true)
                 }
@@ -652,9 +629,9 @@ struct SegmentedPicker<Option: Hashable & Identifiable>: View {
                     Text(title(option))
                         .font(.footnote.weight(selected ? .semibold : .medium))
                         .foregroundStyle(foreground(selected: selected))
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, 8)
                         .padding(.vertical, 6)
-                        .frame(maxWidth: .infinity)
+                        .frame(minWidth: 44, maxWidth: .infinity, minHeight: 44)
                         .background {
                             if selected {
                                 Capsule()
@@ -807,11 +784,13 @@ struct EmptyStateView: View {
 /// A press feedback style for card-like tappable surfaces: a slight scale and
 /// dim, so the whole card feels physical without a highlight color.
 struct PressableCardStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.99 : 1)
             .opacity(configuration.isPressed ? 0.92 : 1)
-            .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: configuration.isPressed)
     }
 }
 
@@ -1009,7 +988,7 @@ extension View {
 
     /// Consistent page padding and max width for scroll-based screens.
     func cairnScreen(maxWidth: CGFloat = CairnTheme.screenMaxWidth) -> some View {
-        padding(.horizontal, CairnTheme.Spacing.l)
+        padding(.horizontal, 20)
             .padding(.top, CairnTheme.Spacing.s)
             .padding(.bottom, CairnTheme.Spacing.xxl)
             .frame(maxWidth: maxWidth)

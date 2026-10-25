@@ -38,27 +38,26 @@ struct HomeView: View {
                     emptyState
                     PersonalTrackingEntryPoints()
                 } else {
-                    NavigationLink {
-                        NetWorthView()
-                    } label: {
+                    VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
                         NetWorthHero(accounts: accounts, settings: settings)
+                        syncStatus
                     }
-                    .buttonStyle(.pressableCard)
                     .cairnAppear()
 
                     SyncIssueCard()
 
-                    syncStatus
-                        .cairnAppear(delay: 0.05)
+                    VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
+                        ScreenSectionHeader("Accounts") {
+                            Text(accounts.count, format: .number)
+                                .font(.subheadline.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .accessibilityLabel("^[\(accounts.count) account](inflect: true)")
+                        }
+                        institutionsSection
+                    }
+                    .cairnAppear(delay: 0.05)
 
                     planningSection
-                        .cairnAppear(delay: 0.08)
-
-                    ScreenSectionHeader(
-                        "Accounts",
-                        subtitle: "Balances grouped by where they are held."
-                    )
-                    institutionsSection
                         .cairnAppear(delay: 0.1)
                 }
             }
@@ -92,33 +91,35 @@ struct HomeView: View {
 
     @ViewBuilder
     private var planningSection: some View {
-        NavigationLink {
-            ForecastView()
-        } label: {
-            Card {
-                HStack(spacing: 12) {
-                    Image(systemName: "chart.xyaxis.line")
-                        .font(.title2)
-                        .foregroundStyle(CairnTheme.accent)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Cash-flow forecast").font(.headline)
-                        Text("Saved balances and plans over the next 30 days")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
+            ScreenSectionHeader("Planning")
+
+            NavigationLink {
+                ForecastView()
+            } label: {
+                Card {
+                    HStack(spacing: CairnTheme.Spacing.m) {
+                        Image(systemName: "chart.xyaxis.line")
+                            .font(.title3)
+                            .foregroundStyle(CairnTheme.accent)
+                            .frame(width: 32)
+                            .accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Cash-flow forecast").font(.headline)
+                            Text("Your next 30 days")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
                     }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").foregroundStyle(.secondary)
                 }
             }
-        }
-        .buttonStyle(.pressableCard)
-        if budgetingEnabled || !homeRecurring.isEmpty {
-            VStack(alignment: .leading, spacing: CairnTheme.Spacing.m) {
-                ScreenSectionHeader(
-                    "Planning",
-                    subtitle: "What this month is committed to and what remains."
-                )
-
+            .buttonStyle(.pressableCard)
+            if budgetingEnabled || !homeRecurring.isEmpty {
                 DashboardGrid(minimumColumnWidth: 340) {
                     if budgetingEnabled {
                         NavigationLink {
@@ -148,8 +149,8 @@ struct HomeView: View {
                     }
                 }
             }
+            PersonalTrackingEntryPoints()
         }
-        PersonalTrackingEntryPoints()
     }
 
     private var budgetCurrency: Currency {
@@ -467,7 +468,7 @@ struct HomeView: View {
         }
         .font(.footnote)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 4)
         .animation(CairnTheme.Motion.quick, value: model.syncState)
     }
 
@@ -489,7 +490,7 @@ struct HomeView: View {
     }
 
     private var institutionsSection: some View {
-        VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
+        VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
             ForEach(institutions) { institution in
                 let institutionAccounts = accounts.filter {
                     $0.institution?.persistentModelID == institution.persistentModelID
@@ -527,24 +528,28 @@ struct HomeView: View {
         institution: Institution? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 8) {
-                if let institution {
-                    InstitutionLogo(
-                        organizationURL: institution.orgURL,
-                        displayName: institution.name.isEmpty ? String(localized: "Institution") : institution.name,
-                        size: 26
-                    )
+            accountHeaderLayout {
+                HStack(spacing: 8) {
+                    if let institution {
+                        InstitutionLogo(
+                            organizationURL: institution.orgURL,
+                            displayName: institution.name.isEmpty ? String(localized: "Institution") : institution.name,
+                            size: 26
+                        )
+                    }
+                    Text(title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .accessibilityAddTraits(.isHeader)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(title)
-                    .textCase(.uppercase)
-                    .font(.cairnLabel)
-                    .tracking(0.8)
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: CairnTheme.Spacing.s)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Spacer(minLength: CairnTheme.Spacing.s)
+                }
                 if let trailing {
                     Text(trailing)
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, 4)
@@ -556,6 +561,14 @@ struct HomeView: View {
                     )
                 }
             }
+        }
+    }
+
+    private var accountHeaderLayout: AnyLayout {
+        if dynamicTypeSize.isAccessibilitySize {
+            AnyLayout(VStackLayout(alignment: .leading, spacing: CairnTheme.Spacing.xs))
+        } else {
+            AnyLayout(HStackLayout(alignment: .center, spacing: CairnTheme.Spacing.s))
         }
     }
 
@@ -669,6 +682,7 @@ struct SyncButton: View {
 struct NetWorthHero: View {
     let accounts: [Account]
     let settings: [AppSettings]
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Query private var chartTransactions: [LedgerTransaction]
 
     @State private var selectedIndex: Int?
@@ -699,88 +713,127 @@ struct NetWorthHero: View {
         let split = NetWorthMath.assetsAndLiabilities(accounts: accounts, currency: currency)
         let shown = selectedPoint?.balanceMinorUnits ?? total
 
-        HeroCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    if let selectedPoint {
-                        Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .contentTransition(.opacity)
-                    } else {
+        VStack(alignment: .leading, spacing: CairnTheme.Spacing.l) {
+            NavigationLink {
+                NetWorthView()
+            } label: {
+                VStack(alignment: .leading, spacing: CairnTheme.Spacing.s) {
+                    HStack {
                         Text("Net worth")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .contentTransition(.opacity)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Group {
+                            if dynamicTypeSize.isAccessibilitySize {
+                                Label("History", systemImage: "arrow.up.right")
+                                    .labelStyle(.iconOnly)
+                            } else {
+                                Label("History", systemImage: "arrow.up.right")
+                            }
+                        }
+                        .font(.subheadline)
+                        .foregroundStyle(CairnTheme.accent)
+                    }
+                    AmountText(
+                        money: Money(minorUnits: shown, currency: currency),
+                        font: .cairnHero,
+                        deemphasizeFraction: true
+                    )
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("netWorthDetails")
+            .accessibilityHint("Shows your net-worth history and account breakdown")
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: CairnTheme.Spacing.s) { changeDescription(change) }
+                VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) { changeDescription(change) }
+            }
+
+            if series.count > 2 {
+                Sparkline(
+                    values: series.map { NetWorthMath.doubleValue($0.balanceMinorUnits, currency: currency) },
+                    tint: CairnTheme.accent,
+                    lineWidth: 2.5,
+                    selection: $selectedIndex
+                )
+                .frame(height: 88)
+                .onChange(of: series.count) { _, _ in selectedIndex = nil }
+                .sensoryFeedback(.selection, trigger: selectedIndex)
+
+                HStack {
+                    if let first = series.first {
+                        Text(first.date, format: .dateTime.month(.abbreviated).day())
                     }
                     Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.5))
-                        .accessibilityHidden(true)
+                    Text("Today")
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            }
 
-                AmountText(
-                    money: Money(minorUnits: shown, currency: currency),
-                    font: .cairnHero,
-                    colorOverride: .white,
-                    deemphasizeFraction: true
-                )
+            Divider()
 
-                HStack(spacing: 8) {
-                    if let selected = selectedPoint {
-                        Text("Balance on \(selected.date.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
-                    } else {
-                        if let ratio = change.ratio {
-                            TrendPill(ratio: ratio, higherIsBad: false, onInk: true)
-                        }
-                        Text(changeText(change.delta))
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                }
-
-                if series.count > 2 {
-                    Sparkline(
-                        values: series.map { NetWorthMath.doubleValue($0.balanceMinorUnits, currency: currency) },
-                        tint: CairnTheme.inkGlow,
-                        lineWidth: 2,
-                        selection: $selectedIndex
-                    )
-                    .frame(height: 56)
-                    .onChange(of: series.count) { _, _ in selectedIndex = nil }
-                    .sensoryFeedback(.selection, trigger: selectedIndex)
-                }
-
-                HStack(spacing: 20) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: CairnTheme.Spacing.xl) {
                     heroMetric("Assets", Money(minorUnits: split.assets, currency: currency))
                     heroMetric("Liabilities", Money(minorUnits: -split.liabilities, currency: currency))
-                    if totals.count > 1 {
-                        Spacer()
-                        Text("+\(totals.count - 1) more currenc\(totals.count == 2 ? "y" : "ies")")
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: CairnTheme.Spacing.m) {
+                    heroMetric("Assets", Money(minorUnits: split.assets, currency: currency))
+                    heroMetric("Liabilities", Money(minorUnits: -split.liabilities, currency: currency))
                 }
             }
+            if totals.count > 1 {
+                Text("Plus balances in ^[\(totals.count - 1) other currency](inflect: true)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .animation(CairnTheme.Motion.quick, value: selectedIndex)
+        .padding(.horizontal, 4)
+        .padding(.top, CairnTheme.Spacing.s)
     }
 
-    private func heroMetric(_ title: String, _ money: Money) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    @ViewBuilder
+    private func changeDescription(_ change: (delta: Int64, ratio: Double?)) -> some View {
+        if let selected = selectedPoint {
+            Text("Balance on \(selected.date.formatted(date: .abbreviated, time: .omitted))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        } else if change.delta == 0 {
+            Text("No change in 30 days")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        } else {
+            Label {
+                AmountText(
+                    money: Money(minorUnits: change.delta, currency: currency),
+                    showSign: true,
+                    font: .subheadline,
+                    colorOverride: change.delta < 0 ? CairnTheme.negative : CairnTheme.positive
+                )
+            } icon: {
+                Image(systemName: change.delta < 0 ? "arrow.down.right" : "arrow.up.right")
+            }
+            .foregroundStyle(change.delta < 0 ? CairnTheme.negative : CairnTheme.positive)
+            Text("in the last 30 days")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func heroMetric(_ title: LocalizedStringKey, _ money: Money) -> some View {
+        VStack(alignment: .leading, spacing: CairnTheme.Spacing.xs) {
             Text(title)
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.6))
-            AmountText(money: money, font: .subheadline.weight(.semibold), colorOverride: .white)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            AmountText(money: money, font: .headline)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
-    private func changeText(_ delta: Int64) -> String {
-        let money = Money(minorUnits: delta, currency: currency)
-        if delta == 0 { return "No change in 30 days" }
-        return "\(delta > 0 ? "+" : "")\(money.formatted()) in 30 days"
-    }
 }

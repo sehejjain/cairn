@@ -136,68 +136,82 @@ struct InvestmentsView: View {
         let change = NetWorthMath.change(in: series)
         let shown = selectedPoint?.balanceMinorUnits ?? totalMinorUnits
 
-        return HeroCard {
-            VStack(alignment: .leading, spacing: 14) {
+        return VStack(alignment: .leading, spacing: 14) {
+            ViewThatFits(in: .horizontal) {
                 HStack {
-                    if let selectedPoint {
-                        Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .contentTransition(.opacity)
-                    } else {
-                        Text("Account balance")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.white.opacity(0.75))
-                            .contentTransition(.opacity)
-                    }
-                    Spacer()
-                    SegmentedPicker(options: HistoryRange.allCases, selection: $historyRange) {
-                        LocalizedStringKey($0.title)
-                    }
-                    .frame(maxWidth: 180)
+                    balanceDateLabel
+                    Spacer(minLength: 8)
+                    historyRangePicker
                 }
+                .fixedSize(horizontal: true, vertical: false)
 
-                AmountText(
-                    money: Money(minorUnits: shown, currency: currency),
-                    font: .cairnHero,
-                    colorOverride: .white,
-                    deemphasizeFraction: true
-                )
-
-                HStack(spacing: 8) {
-                    if let selected = selectedPoint {
-                        Text("Balance on \(selected.date.formatted(date: .abbreviated, time: .omitted))")
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
-                    } else {
-                        if let ratio = change.ratio {
-                            TrendPill(ratio: ratio, higherIsBad: false, onInk: true)
-                        }
-                        Text(asOfText)
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    balanceDateLabel
+                    historyRangePicker
                 }
-
-                if series.count > 2 {
-                    Sparkline(
-                        values: series.map { NetWorthMath.doubleValue($0.balanceMinorUnits, currency: currency) },
-                        tint: CairnTheme.inkGlow,
-                        lineWidth: 2,
-                        selection: $selectedIndex
-                    )
-                    .frame(height: 56)
-                    .onChange(of: series.count) { _, _ in selectedIndex = nil }
-                    .sensoryFeedback(.selection, trigger: selectedIndex)
-                }
-
-                Text("Transaction-derived account balance history, not investment performance.")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.65))
             }
+
+            AmountText(
+                money: Money(minorUnits: shown, currency: currency),
+                font: .cairnHero,
+                deemphasizeFraction: true
+            )
+
+            HStack(spacing: 8) {
+                if let selected = selectedPoint {
+                    Text("Balance on \(selected.date.formatted(date: .abbreviated, time: .omitted))")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } else {
+                    if let ratio = change.ratio {
+                        TrendPill(ratio: ratio, higherIsBad: false)
+                    }
+                    Text(asOfText)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if series.count > 2 {
+                Sparkline(
+                    values: series.map { NetWorthMath.doubleValue($0.balanceMinorUnits, currency: currency) },
+                    tint: CairnTheme.accent,
+                    lineWidth: 2,
+                    selection: $selectedIndex
+                )
+                .frame(height: 68)
+                .onChange(of: series.count) { _, _ in selectedIndex = nil }
+                .sensoryFeedback(.selection, trigger: selectedIndex)
+            }
+
+            Text("Transaction-derived account balance history, not investment performance.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, CairnTheme.Spacing.s)
         .cairnAppear()
         .animation(CairnTheme.Motion.quick, value: selectedIndex)
+    }
+
+    private var balanceDateLabel: some View {
+        Group {
+            if let selectedPoint {
+                Text(selectedPoint.date.formatted(date: .abbreviated, time: .omitted))
+                    .contentTransition(.opacity)
+            } else {
+                Text("Account balance")
+            }
+        }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(.secondary)
+    }
+
+    private var historyRangePicker: some View {
+        SegmentedPicker(options: HistoryRange.allCases, selection: $historyRange) {
+            LocalizedStringKey($0.title)
+        }
+        .frame(maxWidth: 180)
     }
 
     private var asOfText: LocalizedStringKey {
@@ -210,12 +224,7 @@ struct InvestmentsView: View {
     private var accountsSection: some View {
         let grouped = Dictionary(grouping: filteredInvestments) { $0.institution?.name ?? "Manual" }
         return VStack(alignment: .leading, spacing: CairnTheme.Spacing.xl) {
-            HStack {
-                Text("Accounts and positions")
-                    .font(.cairnLabel)
-                    .tracking(0.8)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            ScreenSectionHeader("Accounts and positions") {
                 Menu {
                     Picker("Sort holdings", selection: $sortOption) {
                         ForEach(HoldingSortOption.allCases) { option in
@@ -225,6 +234,7 @@ struct InvestmentsView: View {
                 } label: {
                     Label("Sort", systemImage: "arrow.up.arrow.down")
                         .font(.subheadline.weight(.medium))
+                        .frame(minHeight: 44)
                 }
             }
 
@@ -238,9 +248,13 @@ struct InvestmentsView: View {
     }
 
     private func accountGroup(title: LocalizedStringKey, accounts: [Account]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionLabel(title: title, trailing: "\(accounts.count)")
-            VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
+            ScreenSectionHeader(title, trailing: {
+                Text("\(accounts.count)")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            })
+            VStack(spacing: 14) {
                 ForEach(accounts.sorted {
                     $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
                 }, id: \.persistentModelID) { account in
@@ -285,7 +299,7 @@ struct InvestmentsView: View {
                 Text("Waiting for the first sync")
             }
         }
-        .font(.caption2)
+        .font(.caption)
         .foregroundStyle(.secondary)
         .padding(.horizontal, 12)
     }
