@@ -12,6 +12,7 @@ struct SettingsView: View {
     @AppStorage(MerchantNormalizer.removeProcessorPrefixesKey)
     private var removePaymentProcessorPrefixes = true
     @AppStorage(AppFeature.budgeting.storageKey) private var budgetingEnabled = AppFeature.budgeting.defaultEnabled
+    @AppStorage(AppFeature.cardRewards.storageKey) private var cardRewardsEnabled = AppFeature.cardRewards.defaultEnabled
     @Query(sort: \Institution.name) private var institutions: [Institution]
     @Query(filter: #Predicate<Account> { $0.sourceRaw == "financekit" })
     private var walletAccounts: [Account]
@@ -396,6 +397,14 @@ struct SettingsView: View {
                     AppFeature.budgeting.title,
                     subtitle: AppFeature.budgeting.subtitle,
                     systemImage: AppFeature.budgeting.systemImage,
+                    tint: CairnTheme.accent
+                )
+            }
+            Toggle(isOn: $cardRewardsEnabled) {
+                IconRow(
+                    AppFeature.cardRewards.title,
+                    subtitle: AppFeature.cardRewards.subtitle,
+                    systemImage: AppFeature.cardRewards.systemImage,
                     tint: CairnTheme.accent
                 )
             }

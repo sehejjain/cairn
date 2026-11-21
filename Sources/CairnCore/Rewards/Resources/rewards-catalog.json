@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "categories": [
+    { "id": "base", "name": "Everything else" },
+    { "id": "dining", "name": "Restaurants and dining", "mcc": ["5811", "5812", "5813", "5814"],
+      "mapkit": ["MKPOICategoryRestaurant", "MKPOICategoryCafe", "MKPOICategoryNightlife"] },
+    { "id": "groceries", "name": "Grocery stores", "mcc": ["5422", "5441", "5451", "5462", "5499"] },
+    { "id": "supermarkets", "name": "Supermarkets", "parent": "groceries", "mcc": ["5411"],
+      "mapkit": ["MKPOICategoryFoodMarket"] },
+    { "id": "superstores", "name": "Superstores and discount stores", "mcc": ["5310", "5311"] },
+    { "id": "wholesale-clubs", "name": "Wholesale clubs", "mcc": ["5300"] },
+    { "id": "gas", "name": "Gas stations", "mcc": ["5541", "5542"], "mapkit": ["MKPOICategoryGasStation"] },
+    { "id": "ev-charging", "name": "EV charging", "mcc": ["5552"], "mapkit": ["MKPOICategoryEVCharger"] },
+    { "id": "travel", "name": "Travel", "mcc": ["4722"] },
+    { "id": "airlines", "name": "Airlines", "parent": "travel", "mcc": ["3000-3350", "4511"] },
+    { "id": "hotels", "name": "Hotels", "parent": "travel", "mcc": ["3501-3999", "7011"],
+      "mapkit": ["MKPOICategoryHotel"] },
+    { "id": "car-rental", "name": "Car rental", "parent": "travel", "mcc": ["3351-3500", "7512"],
+      "mapkit": ["MKPOICategoryCarRental"] },
+    { "id": "cruises", "name": "Cruises", "parent": "travel", "mcc": ["4411"] },
+    { "id": "transit", "name": "Transit, rideshare, parking, and tolls", "parent": "travel",
+      "mcc": ["4111", "4112", "4121", "4131", "4784", "7523"],
+      "mapkit": ["MKPOICategoryPublicTransport", "MKPOICategoryParking"] },
+    { "id": "entertainment", "name": "Entertainment", "mcc": ["7832", "7922", "7929", "7941"],
+      "mapkit": ["MKPOICategoryMovieTheater", "MKPOICategoryStadium", "MKPOICategoryTheater"] },
+    { "id": "attractions", "name": "Attractions", "parent": "entertainment", "mcc": ["7991", "7996"],
+      "mapkit": ["MKPOICategoryAmusementPark", "MKPOICategoryAquarium", "MKPOICategoryZoo", "MKPOICategoryMuseum"] },
+    { "id": "streaming", "name": "Streaming services", "mcc": ["4899", "5815"] },
+    { "id": "drugstores", "name": "Drugstores and pharmacies", "mcc": ["5912"], "mapkit": ["MKPOICategoryPharmacy"] },
+    { "id": "home-improvement", "name": "Home improvement", "mcc": ["5200", "5211"] }
+  ],
+  "currencies": [
+    { "id": "cash", "name": "Cash back", "kind": "cash", "cents_per_point": 1.0 },
+    { "id": "amex-mr", "name": "Membership Rewards", "kind": "points", "cents_per_point": 1.0 },
+    { "id": "chase-ur", "name": "Ultimate Rewards", "kind": "points", "cents_per_point": 1.0 },
+    { "id": "citi-typ", "name": "ThankYou Points", "kind": "points", "cents_per_point": 1.0 },
+    { "id": "capital-one-miles", "name": "Capital One Miles", "kind": "miles", "cents_per_point": 1.0 }
+  ],
+  "issuers": [
+    { "id": "american-express", "name": "American Express", "aliases": ["Amex"], "offer_program": "Amex Offers" },
+    { "id": "chase", "name": "Chase", "aliases": ["JPMorgan Chase", "Chase Bank"], "offer_program": "Chase Offers" },
+    { "id": "citi", "name": "Citi", "aliases": ["Citibank"], "offer_program": "Citi Merchant Offers" },
+    { "id": "capital-one", "name": "Capital One", "offer_program": "Capital One Offers" },
+    { "id": "bank-of-america", "name": "Bank of America", "aliases": ["BofA"], "offer_program": "BankAmeriDeals" },
+    { "id": "wells-fargo", "name": "Wells Fargo", "offer_program": "My Wells Fargo Deals" },
+    { "id": "us-bank", "name": "U.S. Bank", "aliases": ["US Bank"] },
+    { "id": "discover", "name": "Discover" }
+  ],
+  "merchants": [
+    { "id": "costco", "name": "Costco", "domains": ["costco.com"], "categories": ["wholesale-clubs"],
+      "in_store_networks": ["visa"] },
+    { "id": "sams-club", "name": "Sam's Club", "domains": ["samsclub.com"], "aliases": ["Sams Club"],
+      "categories": ["wholesale-clubs"] },
+    { "id": "walmart", "name": "Walmart", "domains": ["walmart.com"], "categories": ["superstores"] },
+    { "id": "target", "name": "Target", "domains": ["target.com"], "categories": ["superstores"] },
+    { "id": "amazon", "name": "Amazon", "domains": ["amazon.com"], "categories": ["base"] },
+    { "id": "whole-foods", "name": "Whole Foods Market", "domains": ["wholefoodsmarket.com"],
+      "aliases": ["Whole Foods"], "categories": ["supermarkets"] },
+    { "id": "kroger", "name": "Kroger", "domains": ["kroger.com"], "categories": ["supermarkets"] },
+    { "id": "trader-joes", "name": "Trader Joe's", "domains": ["traderjoes.com"], "categories": ["supermarkets"] },
+    { "id": "starbucks", "name": "Starbucks", "domains": ["starbucks.com"], "categories": ["dining"] },
+    { "id": "chipotle", "name": "Chipotle", "domains": ["chipotle.com"], "aliases": ["Chipotle Mexican Grill"],
+      "categories": ["dining"] },
+    { "id": "shell", "name": "Shell", "domains": ["shell.com", "shell.us"], "categories": ["gas"] },
+    { "id": "chevron", "name": "Chevron", "domains": ["chevron.com"], "categories": ["gas"] },
+    { "id": "cvs", "name": "CVS", "domains": ["cvs.com"], "aliases": ["CVS Pharmacy"], "categories": ["drugstores"] },
+    { "id": "walgreens", "name": "Walgreens", "domains": ["walgreens.com"], "categories": ["drugstores"] },
+    { "id": "netflix", "name": "Netflix", "domains": ["netflix.com"], "categories": ["streaming"] },
+    { "id": "spotify", "name": "Spotify", "domains": ["spotify.com"], "categories": ["streaming"] },
+    { "id": "amc-theatres", "name": "AMC Theatres", "domains": ["amctheatres.com"], "aliases": ["AMC"],
+      "categories": ["entertainment"] },
+    { "id": "delta", "name": "Delta Air Lines", "domains": ["delta.com"], "aliases": ["Delta"], "categories": ["airlines"] },
+    { "id": "united", "name": "United Airlines", "domains": ["united.com"], "aliases": ["United"],
+      "categories": ["airlines"] },
+    { "id": "marriott", "name": "Marriott", "domains": ["marriott.com"], "categories": ["hotels"] },
+    { "id": "hilton", "name": "Hilton", "domains": ["hilton.com"], "categories": ["hotels"] },
+    { "id": "home-depot", "name": "The Home Depot", "domains": ["homedepot.com"], "aliases": ["Home Depot"],
+      "categories": ["home-improvement"] }
+  ],
+  "cards": [
+    {
+      "id": "amex-gold",
+      "name": "American Express Gold Card",
+      "issuer": "american-express",
+      "network": "amex",
+      "currency": "amex-mr",
+      "annual_fee": 350,
+      "foreign_transaction_fee": 0,
+      "url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+      "status": "needs-review",
+      "unverified_fields": ["annual_fee"],
+      "rates_source": {
+        "url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+        "verified_at": "2026-11-21",
+        "verified_by": "automated-read"
+      },
+      "earn": [
+        { "id": "amex-travel-hotels", "categories": ["hotels"], "multiplier": 5, "channel": "issuer-portal",
+          "note": "Prepaid hotels booked through AmexTravel.com or the Amex Travel app" },
+        { "id": "restaurants", "categories": ["dining"], "multiplier": 4,
+          "cap": { "amount": 50000, "period": "year", "after": 1 },
+          "note": "Restaurants worldwide, up to $50,000 per calendar year" },
+        { "id": "us-supermarkets", "categories": ["supermarkets"], "multiplier": 4, "domestic_only": true,
+          "cap": { "amount": 25000, "period": "year", "after": 1 },
+          "note": "U.S. supermarkets, up to $25,000 per calendar year" },
+        { "id": "flights", "categories": ["airlines"], "multiplier": 3,
+          "note": "Flights booked directly with airlines or through Amex Travel" },
+        { "id": "amex-travel-cars-cruises", "categories": ["car-rental", "cruises"], "multiplier": 2,
+          "channel": "issuer-portal", "note": "Prepaid car rentals and cruises booked through Amex Travel" },
+        { "id": "base", "categories": ["base"], "multiplier": 1 }
+      ]
+    },
+    {
+      "id": "chase-freedom-unlimited",
+      "name": "Chase Freedom Unlimited",
+      "issuer": "chase",
+      "network": "visa",
+      "currency": "chase-ur",
+      "annual_fee": 0,
+      "url": "https://www.chase.com/personal/credit-cards/freedom/unlimited",
+      "status": "needs-review",
+      "unverified_fields": ["annual_fee", "network", "foreign_transaction_fee"],
+      "rates_source": {
+        "url": "https://www.chase.com/personal/credit-cards/freedom/unlimited",
+        "verified_at": "2026-11-21",
+        "verified_by": "automated-read"
+      },
+      "earn": [
+        { "id": "chase-travel", "categories": ["travel"], "multiplier": 5, "channel": "issuer-portal",
+          "note": "Travel purchased through Chase Travel" },
+        { "id": "dining", "categories": ["dining"], "multiplier": 3,
+          "note": "Dining, including takeout and eligible delivery" },
+        { "id": "drugstores", "categories": ["drugstores"], "multiplier": 3 },
+        { "id": "base", "categories": ["base"], "multiplier": 1.5 }
+      ]
+    },
+    {
+      "id": "chase-freedom-flex",
+      "name": "Chase Freedom Flex",
+      "issuer": "chase",
+      "network": "mastercard",
+      "currency": "chase-ur",
+      "annual_fee": 0,
+      "url": "https://www.chase.com/personal/credit-cards/freedom/flex",
+      "status": "needs-review",
+      "unverified_fields": ["annual_fee", "network", "foreign_transaction_fee"],
+      "rates_source": {
+        "url": "https://www.chase.com/personal/credit-cards/freedom/flex",
+        "verified_at": "2026-11-21",
+        "verified_by": "automated-read"
+      },
+      "earn": [
+        { "id": "chase-travel", "categories": ["travel"], "multiplier": 5, "channel": "issuer-portal",
+          "note": "Travel purchased through Chase Travel" },
+        { "id": "dining", "categories": ["dining"], "multiplier": 3, "note": "Dining, in or out" },
+        { "id": "drugstores", "categories": ["drugstores"], "multiplier": 3 },
+        { "id": "base", "categories": ["base"], "multiplier": 1 }
+      ]
+    },
+    {
+      "id": "citi-double-cash",
+      "name": "Citi Double Cash",
+      "issuer": "citi",
+      "network": "mastercard",
+      "currency": "citi-typ",
+      "annual_fee": 0,
+      "url": "https://www.citi.com/credit-cards/citi-double-cash-credit-card",
+      "status": "needs-review",
+      "unverified_fields": ["network", "foreign_transaction_fee"],
+      "rates_source": {
+        "url": "https://www.citi.com/credit-cards/citi-double-cash-credit-card",
+        "verified_at": "2026-11-21",
+        "verified_by": "automated-read"
+      },
+      "earn": [
+        { "id": "citi-travel", "categories": ["hotels", "car-rental", "attractions"], "multiplier": 5,
+          "channel": "issuer-portal",
+          "note": "Hotels, car rentals, and attractions booked through Citi Travel (2% plus an extra 3%)" },
+        { "id": "base", "categories": ["base"], "multiplier": 2, "note": "1% when you buy plus 1% as you pay" }
+      ]
+    },
+    {
+      "id": "citi-strata-premier",
+      "name": "Citi Strata Premier",
+      "issuer": "citi",
+      "network": "mastercard",
+      "currency": "citi-typ",
+      "annual_fee": 95,
+      "foreign_transaction_fee": 0,
+      "url": "https://www.citi.com/credit-cards/citi-strata-premier-credit-card",
+      "status": "needs-review",
+      "unverified_fields": ["network"],
+      "rates_source": {
+        "url": "https://www.citi.com/credit-cards/citi-strata-premier-credit-card",
+        "verified_at": "2026-11-21",
+        "verified_by": "automated-read"
+      },
+      "earn": [
+        { "id": "citi-travel", "categories": ["hotels", "car-rental", "attractions"], "multiplier": 10,
+          "channel": "issuer-portal", "note": "Hotels, car rentals, and attractions booked on cititravel.com" },
+        { "id": "air-and-hotels", "categories": ["airlines", "hotels"], "multiplier": 3,
+          "note": "Air travel and other hotel purchases" },
+        { "id": "restaurants", "categories": ["dining"], "multiplier": 3 },
+        { "id": "supermarkets", "categories": ["supermarkets"], "multiplier": 3 },
+        { "id": "gas-and-ev", "categories": ["gas", "ev-charging"], "multiplier": 3,
+          "note": "Gas and EV charging stations" },
+        { "id": "base", "categories": ["base"], "multiplier": 1 }
+      ],
+      "credits": [
+        { "id": "hotel-benefit", "name": "$100 off a single hotel stay of $500 or more booked through Citi Travel",
+          "amount": 100, "period": "year", "resets": "calendar" }
+      ]
+    },
+    {
+      "id": "capital-one-savor",
+      "name": "Capital One Savor",
+      "issuer": "capital-one",
+      "network": "visa",
+      "currency": "cash",
+      "annual_fee": 0,
+      "foreign_transaction_fee": 0,
+      "url": "https://www.capitalone.com/credit-cards/savor/",
+      "status": "needs-review",
+      "unverified_fields": ["network"],
+      "rates_source": {
+        "url": "https://www.capitalone.com/credit-cards/savor/",
+        "verified_at": "2026-11-21",
+        "verified_by": "automated-read"
+      },
+      "earn": [
+        { "id": "capital-one-entertainment", "categories": ["entertainment"], "multiplier": 8,
+          "channel": "issuer-portal", "note": "Capital One Entertainment purchases" },
+        { "id": "capital-one-travel", "categories": ["hotels", "car-rental"], "multiplier": 5,
+          "channel": "issuer-portal",
+          "note": "Hotels, vacation rentals, and rental cars booked through Capital One Travel" },
+        { "id": "everyday", "categories": ["groceries", "dining", "entertainment", "streaming"], "multiplier": 3,
+          "note": "Grocery stores (superstores excluded), dining, entertainment, and popular streaming services" },
+        { "id": "base", "categories": ["base"], "multiplier": 1 }
+      ]
+    }
+  ]
+}
