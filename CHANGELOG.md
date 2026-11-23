@@ -6,6 +6,8 @@ All notable changes to Cairn are documented here. This project follows
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-23
+
 ### Added
 
 - Add **Best card** to Plan. Choose the cards you carry, then enter a store,
