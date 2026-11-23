@@ -72,6 +72,9 @@ currencies.
 - Investments and holdings, with cost basis and gain per position.
 - Insights: spending pace, category breakdowns, and six-month trends.
 - Monthly category limits with spending, remaining amounts, and one-month overrides.
+- Best card: shows which of your credit cards earns the most at a store or in a
+  category, from a bundled, source-linked rewards catalog. It runs on-device, and
+  your card choices stay on this device.
 - Imports CSV exports from other apps, and adds manual accounts.
 - Syncs across devices through your private iCloud database with **end-to-end
   encrypted financial fields** — Apple stores the record, not the amount. iCloud

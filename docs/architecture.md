@@ -18,8 +18,22 @@ CairnCore (Swift package)
    ├─ Insights/      month-over-month math, subscription detection
    ├─ Budgets/       monthly category limit math and ledger snapshots
    ├─ Planning/      personal shared expenses and sinking-fund calculations
+   ├─ Rewards/       bundled card-rewards catalog and best-card ranking
    └─ Export/        CSV + JSON
 ```
+
+Card rewards (`CardRecommender`) are pure, on-device reference math. The
+catalog, `Rewards/Resources/rewards-catalog.json`, ships inside the package: card
+earning rules, issuer categories with MCC and MapKit mappings, and known
+merchants. Each card's rates cite the issuer page they came from and when it was
+read; `RewardCatalogValidator` and golden purchases in `CardRewardsTests` check it
+on every test run. For a purchase, the recommender resolves the merchant (by
+website, name, or statement text) or category, picks each card's most specific
+rule (merchant, then category, then parent category, then base), and ranks by
+multiplier × the person's point value, less any foreign transaction fee. The
+person's chosen cards and point values are device-local user defaults, not
+SwiftData records, so the feature adds no CloudKit fields. It makes no network
+requests; catalog updates ship with app releases.
 
 Recurring detection (`RecurringDetector`) is pure and on-device: it groups
 transactions by merchant and account, then keeps only runs of at least three

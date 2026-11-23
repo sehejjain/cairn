@@ -6,6 +6,17 @@ All notable changes to Cairn are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- Add **Best card** to Plan. Choose the cards you carry, then enter a store,
+  website, or category to see which card earns the most, with the rate and
+  value per dollar for each. Merchants that don't take a card's network, U.S.-only
+  bonuses, spend caps, and foreign transaction fees are taken into account.
+- Suggest cards from your credit-card account names, and let you set what a
+  point is worth to you. Rankings run on your device from a catalog bundled with
+  the app; card choices stay on this device. Turn the feature off in
+  Settings → Features.
+
 ## [1.6.0] - 2026-10-25
 
 ### Changed

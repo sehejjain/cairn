@@ -13,6 +13,7 @@ struct PlanOverview: View {
     let retry: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @AppStorage(AppFeature.cardRewards.storageKey) private var cardRewardsEnabled = AppFeature.cardRewards.defaultEnabled
 
     private let categoryLimit = 5
 
@@ -73,6 +74,14 @@ struct PlanOverview: View {
                     FlowLinkRow(title: "Cash-flow forecast", symbol: "chart.xyaxis.line")
                 }
                 .buttonStyle(.plain)
+                if cardRewardsEnabled {
+                    NavigationLink { CardRewardsView() } label: {
+                        FlowLinkRow(title: "Best card to use", symbol: "creditcard",
+                                    subtitle: "See which card earns the most at a store")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("cardRewards")
+                }
             }
         }
     }

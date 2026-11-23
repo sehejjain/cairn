@@ -13,6 +13,9 @@ let package = Package(
     targets: [
         .target(
             name: "CairnCore",
+            resources: [
+                .copy("Rewards/Resources/rewards-catalog.json"),
+            ],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
                 .enableUpcomingFeature("ExistentialAny"),
